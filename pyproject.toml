@@ -1,0 +1,59 @@
+[project]
+name = "tiff-analyzer"
+version = "0.1.0"
+description = "Lossless recompression of layered TIFF files with Photoshop data"
+requires-python = ">=3.13"
+dependencies = [
+    "tifffile>=2024.1.30",
+    "numpy",
+]
+
+[project.scripts]
+tiff-analyzer = "tiff_analyzer.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["tiff_analyzer"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests", "tiff_analyzer"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "-m", "not slow and not bigfile",
+    "--doctest-modules",
+]
+doctest_optionflags = "NORMALIZE_WHITESPACE ELLIPSIS"
+markers = [
+    "slow: needs a large sample file",
+    "bigfile: needs multi-gigabyte production files",
+]
+filterwarnings = ["error", "ignore::DeprecationWarning:tifffile.*"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PT", "ARG", "C4", "PL"]
+ignore = [
+    # Magiczne liczby to domena w parserze binarnym.
+    "PLR2004",
+    # "×" w raporcie (4128 × 6192) jest zamierzone typograficznie.
+    "RUF001",
+    "RUF002",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tiff_analyzer"]

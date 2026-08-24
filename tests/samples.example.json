@@ -1,0 +1,6 @@
+{
+  "_comment": "Copy to samples.local.json and fill in your own file names. That file is git-ignored so private file names never reach the repository. Tests that find no entry are skipped.",
+  "big-psb": "example-a.tif",
+  "big-raw": "example-b.tif",
+  "mixed": "example-c.tif"
+}

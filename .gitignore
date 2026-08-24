@@ -1,0 +1,28 @@
+# The user's own test files - never in the repo
+*.tif
+*.tiff
+*.psb
+*.psd
+
+# Names of private test files (template: tests/samples.example.json)
+tests/samples.local.json
+
+# Output of the verification tools
+tools/verify_report.json
+tools/.mask_check_in.json
+tools/.mask_check_out.json
+.playwright-mcp/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
