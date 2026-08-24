@@ -35,13 +35,7 @@ def named_key(name: str) -> bytes:
 
 
 def descriptor_bytes(*items: bytes, classid: str = "null", name: str = "") -> bytes:
-    return (
-        text(name)
-        + u32(0)
-        + code(classid)
-        + u32(len(items))
-        + b"".join(items)
-    )
+    return text(name) + u32(0) + code(classid) + u32(len(items)) + b"".join(items)
 
 
 def field(key: str, ostype: str, payload: bytes) -> bytes:
@@ -89,10 +83,10 @@ def test_double_field():
 
 def test_text_field():
     # Arrange
-    stream = descriptor_bytes(field("name", "TEXT", text("Warstwa 1")))
+    stream = descriptor_bytes(field("name", "TEXT", text("Layer 1")))
 
     # Act / Assert
-    assert parse(stream).descriptor["name"] == "Warstwa 1"
+    assert parse(stream).descriptor["name"] == "Layer 1"
 
 
 def test_empty_text_is_stripped_of_terminator():
@@ -183,10 +177,10 @@ def test_list_field():
 
 def test_empty_list():
     # Arrange
-    stream = descriptor_bytes(field("brak", "VlLs", u32(0)))
+    stream = descriptor_bytes(field("missing", "VlLs", u32(0)))
 
     # Act / Assert
-    assert parse(stream).descriptor["brak"] == []
+    assert parse(stream).descriptor["missing"] == []
 
 
 def test_classid_and_name_are_read():

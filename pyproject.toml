@@ -12,7 +12,12 @@ dependencies = [
 tiff-analyzer = "tiff_analyzer.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.16",
+    "pyrefly>=1.2",
+    "pre-commit>=4",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -45,9 +50,10 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PT", "ARG", "C4", "PL"]
 ignore = [
-    # Magiczne liczby to domena w parserze binarnym.
+    # Magic numbers are the subject matter of a binary parser.
     "PLR2004",
-    # "×" w raporcie (4128 × 6192) jest zamierzone typograficznie.
+    # The "x" in report dimensions (4128 x 6192) is a deliberate typographic
+    # choice, not a stray character.
     "RUF001",
     "RUF002",
 ]
@@ -57,3 +63,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["tiff_analyzer"]
+
+[tool.pyrefly]
+project-includes = ["tiff_analyzer", "tests", "tools"]
+python-version = "3.13"

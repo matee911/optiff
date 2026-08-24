@@ -31,121 +31,121 @@ var REPORT = new File($.fileName).parent + "/verify_report.json";
 var SUFFIXES = [".opt.tif", ".img.tif", ".zipfb.tif"];
 
 // A dialog would block the script forever.
-var poprzedniDialog = app.displayDialogs;
+var previousDialogs = app.displayDialogs;
 app.displayDialogs = DialogModes.NO;
 
-function nazwyWarstw(zbior, result, poziom) {
-    for (var i = 0; i < zbior.length; i++) {
-        var warstwa = zbior[i];
+function layerNames(collection, result, depth) {
+    for (var i = 0; i < collection.length; i++) {
+        var layer = collection[i];
         result.push({
-            name: warstwa.name,
-            poziom: poziom,
-            typ: String(warstwa.typename),
-            widoczna: warstwa.visible
+            name: layer.name,
+            depth: depth,
+            kind: String(layer.typename),
+            visible: layer.visible
         });
 
-        if (warstwa.typename === "LayerSet") {
-            nazwyWarstw(warstwa.layers, result, poziom + 1);
+        if (layer.typename === "LayerSet") {
+            layerNames(layer.layers, result, depth + 1);
         }
     }
     return result;
 }
 
-function zbadaj(sciezka) {
-    var raport = { file: decodeURI(sciezka), otwarty: false };
+function inspect(path) {
+    var report = { file: decodeURI(path), opened: false };
 
-    var file = new File(sciezka);
+    var file = new File(path);
 
     if (!file.exists) {
-        raport.error = "file nie istnieje";
-        return raport;
+        report.error = "file does not exist";
+        return report;
     }
 
-    var dokument = null;
+    var document = null;
 
     try {
-        dokument = app.open(file);
-        raport.otwarty = true;
-        raport.width = Math.round(dokument.width.as("px"));
-        raport.height = Math.round(dokument.height.as("px"));
-        raport.tryb = String(dokument.mode);
+        document = app.open(file);
+        report.opened = true;
+        report.width = Math.round(document.width.as("px"));
+        report.height = Math.round(document.height.as("px"));
+        report.mode = String(document.mode);
         // bitsPerChannel is an enum: without String() it serialises as {},
-        // przez co porownanie glebi bylo puste.
-        raport.bity = String(dokument.bitsPerChannel);
-        raport.warstwy = nazwyWarstw(dokument.layers, [], 0);
-        raport.liczbaWarstw = raport.warstwy.length;
+        // which is what once made the depth comparison compare nothing.
+        report.depth = String(document.bitsPerChannel);
+        report.layers = layerNames(document.layers, [], 0);
+        report.layerCount = report.layers.length;
     } catch (error) {
-        raport.error = String(error);
+        report.error = String(error);
     } finally {
-        if (dokument !== null) {
+        if (document !== null) {
             try {
-                dokument.close(SaveOptions.DONOTSAVECHANGES);
-            } catch (ignorowany) {
+                document.close(SaveOptions.DONOTSAVECHANGES);
+            } catch (ignored) {
                 // the document may not have opened fully
             }
         }
     }
 
-    return raport;
+    return report;
 }
 
-function zapisz(tekst) {
+function save(text) {
     var file = new File(REPORT);
     file.encoding = "UTF-8";
     file.open("w");
-    file.write(tekst);
+    file.write(text);
     file.close();
 }
 
-function serializuj(obiekt) {
-    if (obiekt === null) { return "null"; }
+function serialise(value) {
+    if (value === null) { return "null"; }
 
-    var typ = typeof obiekt;
+    var kind = typeof value;
 
-    if (typ === "number") { return String(obiekt); }
-    if (typ === "boolean") { return obiekt ? "true" : "false"; }
+    if (kind === "number") { return String(value); }
+    if (kind === "boolean") { return value ? "true" : "false"; }
 
-    if (typ === "string") {
-        return '"' + obiekt.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+    if (kind === "string") {
+        return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
     }
 
-    if (obiekt instanceof Array) {
-        var pozycje = [];
-        for (var i = 0; i < obiekt.length; i++) {
-            pozycje.push(serializuj(obiekt[i]));
+    if (value instanceof Array) {
+        var items = [];
+        for (var i = 0; i < value.length; i++) {
+            items.push(serialise(value[i]));
         }
-        return "[" + pozycje.join(",") + "]";
+        return "[" + items.join(",") + "]";
     }
 
-    var pola = [];
-    for (var klucz in obiekt) {
-        if (obiekt.hasOwnProperty(klucz)) {
-            pola.push('"' + klucz + '":' + serializuj(obiekt[klucz]));
+    var fields = [];
+    for (var key in value) {
+        if (value.hasOwnProperty(key)) {
+            fields.push('"' + key + '":' + serialise(value[key]));
         }
     }
-    return "{" + pola.join(",") + "}";
+    return "{" + fields.join(",") + "}";
 }
 
 // --- the actual work ---
 
-var katalog = new Folder(DIRECTORY);
-var wszystkie = katalog.getFiles("*.tif");
-var pary = [];
+var folder = new Folder(DIRECTORY);
+var everything = folder.getFiles("*.tif");
+var pairs = [];
 
-for (var i = 0; i < wszystkie.length; i++) {
-    var name = decodeURI(wszystkie[i].name);
+for (var i = 0; i < everything.length; i++) {
+    var name = decodeURI(everything[i].name);
 
     for (var s = 0; s < SUFFIXES.length; s++) {
-        var sufiks = SUFFIXES[s];
+        var suffix = SUFFIXES[s];
 
-        if (name.indexOf(sufiks) === -1) {
+        if (name.indexOf(suffix) === -1) {
             continue;
         }
 
-        var source = name.replace(sufiks, ".tif");
+        var source = name.replace(suffix, ".tif");
 
         if (new File(DIRECTORY + "/" + source).exists) {
-            pary.push({ source: source, result: name, wariant: sufiks });
+            pairs.push({ source: source, result: name, variant: suffix });
         }
         break;
     }
@@ -153,18 +153,18 @@ for (var i = 0; i < wszystkie.length; i++) {
 
 var results = [];
 
-for (var j = 0; j < pary.length; j++) {
+for (var j = 0; j < pairs.length; j++) {
     results.push({
-        para: pary[j].source,
-        wariant: pary[j].wariant,
-        source: zbadaj(DIRECTORY + "/" + pary[j].source),
-        result: zbadaj(DIRECTORY + "/" + pary[j].result)
+        pair: pairs[j].source,
+        variant: pairs[j].variant,
+        source: inspect(DIRECTORY + "/" + pairs[j].source),
+        result: inspect(DIRECTORY + "/" + pairs[j].result)
     });
 
     // Report after every pair, so a crash does not take everything with it.
-    zapisz(serializuj(results));
+    save(serialise(results));
 }
 
-app.displayDialogs = poprzedniDialog;
+app.displayDialogs = previousDialogs;
 
 "done: " + results.length + " pairs";

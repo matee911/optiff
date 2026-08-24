@@ -30,9 +30,7 @@ def test_accounted_plus_gaps_equals_file_size(synthetic_psd_tiff: Path):
         gaps = storage.unaccounted_ranges()
 
         # Assert
-        total = sum(item.size for item in accounted) + sum(
-            item.size for item in gaps
-        )
+        total = sum(item.size for item in accounted) + sum(item.size for item in gaps)
         assert total == document.file_size
 
 
@@ -58,9 +56,7 @@ def test_striped_image_uses_exact_ranges(synthetic_striped_tiff: Path):
         # Act
         strips = document.image_data_ranges()
         block = next(
-            item
-            for item in storage.referenced_blocks()
-            if item.name == "IMAGE DATA"
+            item for item in storage.referenced_blocks() if item.name == "IMAGE DATA"
         )
 
         # Assert
@@ -94,7 +90,7 @@ def test_exif_sub_ifd_is_accounted(synthetic_tiff: Path):
 
 
 # ============================================================================
-# REALNE PLIKI
+# REAL FILES
 # ============================================================================
 
 
@@ -111,9 +107,7 @@ def test_test1_is_fully_accounted(sample_tiff: Path):
 
         # Assert - after fixing Bug 8/9/10 only padding remains
         assert unaccounted <= MAX_UNACCOUNTED
-        assert all(
-            classifier.classify(item) == "ZERO / PADDING" for item in gaps
-        )
+        assert all(classifier.classify(item) == "ZERO / PADDING" for item in gaps)
 
 
 @pytest.mark.slow
@@ -155,16 +149,13 @@ def test_every_production_tiff_is_fully_accounted(tiff_dir: Path):
 
             if total != document.file_size:
                 problems.append(
-                    f"{path.name}: rozliczono {total:,} "
-                    f"z {document.file_size:,}"
+                    f"{path.name}: rozliczono {total:,} z {document.file_size:,}"
                 )
 
             unaccounted = sum(item.size for item in gaps)
 
             if unaccounted > MAX_UNACCOUNTED:
-                problems.append(
-                    f"{path.name}: {unaccounted:,} B nierozliczonych"
-                )
+                problems.append(f"{path.name}: {unaccounted:,} B nierozliczonych")
 
             noise = [
                 f"0x{item.start:X}"

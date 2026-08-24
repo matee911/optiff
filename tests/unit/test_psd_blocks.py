@@ -62,7 +62,7 @@ def test_align4(value, expected):
 def test_walk_returns_logical_keys_in_both_byte_orders(byte_order):
     # Arrange
     data = psd_stream(
-        ("Lr16", b"warstwy"),
+        ("Lr16", b"layers"),
         ("LMsk", b"\x00" * 14),
         ("cinf", b"x"),
         byte_order=byte_order,
@@ -73,7 +73,7 @@ def test_walk_returns_logical_keys_in_both_byte_orders(byte_order):
 
     # Assert
     assert [block.key for block in blocks] == ["Lr16", "LMsk", "cinf"]
-    assert [block.size for block in blocks] == [7, 14, 1]
+    assert [block.size for block in blocks] == [6, 14, 1]
     assert warnings == ()
 
 
@@ -176,9 +176,7 @@ def test_walk_payload_offset_points_past_header():
 @pytest.mark.parametrize("byte_order", BYTE_ORDERS)
 def test_walk_supports_8b64_with_eight_byte_length(byte_order):
     # Arrange
-    data = psd_stream(
-        ("Lr16", b"duzy"), byte_order=byte_order, signature="8B64"
-    )
+    data = psd_stream(("Lr16", b"duzy"), byte_order=byte_order, signature="8B64")
 
     # Act
     blocks, warnings = parse(data)
@@ -205,9 +203,7 @@ def test_large_document_gives_selected_keys_eight_byte_length(byte_order):
     ) + psd_block("cinf", b"xy", byte_order=byte_order)
 
     # Act
-    blocks, warnings = walk(
-        BytesReader(data), 0, len(data), large_document=True
-    )
+    blocks, warnings = walk(BytesReader(data), 0, len(data), large_document=True)
 
     # Assert
     assert [block.key for block in blocks] == ["Lr16", "cinf"]

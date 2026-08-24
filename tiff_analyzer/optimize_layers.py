@@ -22,6 +22,7 @@ import hashlib
 import zlib
 from dataclasses import dataclass, field
 
+from tiff_analyzer.domain import ByteOrder, IntOrder
 from tiff_analyzer.psd_codec import (
     RAW,
     ZIP,
@@ -51,9 +52,10 @@ class ChannelResult:
     channel: str
     before: int
     after: int
-    compression: int
+    #: `None` when the channel is too short to carry a method header at all.
+    compression: int | None
     digest: str
-    #: "pixels" gdy liczone z rozpakowanych pikseli, "bytes" gdy z surowych
+    #: "pixels" when taken from decoded pixels, "bytes" when from the raw
     #: channel bytes (a channel we cannot decode is copied verbatim).
     digest_of: str
 
@@ -115,17 +117,19 @@ def _geometry(layer: Layer, channel: LayerChannel, bpp: int) -> ChannelGeometry 
     return geometry
 
 
-def _decode(reader: ByteReader, channel: LayerChannel, geometry) -> bytes | None:
+def _decode(
+    reader: ByteReader,
+    channel: LayerChannel,
+    geometry: ChannelGeometry | None,
+) -> bytes | None:
     """Channel pixels, or `None` when they cannot be read."""
-    if geometry is None:
+    if geometry is None or channel.compression is None:
         return None
 
     data = reader.read_at(channel.data_offset + HEADER, channel.pixel_bytes)
 
     try:
-        return decode_channel(
-            data, compression=channel.compression, geometry=geometry
-        )
+        return decode_channel(data, compression=channel.compression, geometry=geometry)
     except (CodecError, ValueError, zlib.error):
         return None
 
@@ -136,7 +140,7 @@ def _plan_channel(  # noqa: PLR0913  - kontekst channel wymaga tych parametrow
     channel: LayerChannel,
     *,
     bpp: int,
-    order: str,
+    order: IntOrder,
     level: int,
     sources: tuple[int, ...],
     target: int,
@@ -148,7 +152,7 @@ def _plan_channel(  # noqa: PLR0913  - kontekst channel wymaga tych parametrow
 
     replacement: bytes | None = None
 
-    if plain is not None and channel.compression in sources:
+    if plain is not None and geometry is not None and channel.compression in sources:
         packed = encode_channel(
             plain, compression=target, geometry=geometry, level=level
         )
@@ -189,9 +193,7 @@ def _plan_channel(  # noqa: PLR0913  - kontekst channel wymaga tych parametrow
         channel=channel.name,
         before=channel.size,
         after=channel.size if replacement is None else len(replacement),
-        compression=(
-            channel.compression if replacement is None else method
-        ),
+        compression=(channel.compression if replacement is None else method),
         digest=digest,
         digest_of=digest_of,
     )
@@ -199,21 +201,21 @@ def _plan_channel(  # noqa: PLR0913  - kontekst channel wymaga tych parametrow
     return payload, result
 
 
-def plan_layer_section(  # noqa: PLR0913  - zakres, geometria i strojenie
+def plan_layer_section(  # noqa: PLR0913  - range, geometry and tuning
     reader: ByteReader,
     stack: LayerStack,
     start: int,
     end: int,
     *,
     bpp: int,
-    byte_order: str,
+    byte_order: ByteOrder,
     level: int = 6,
     sources: tuple[int, ...] = DEFAULT_SOURCES,
     target: int = ZIP_PREDICTED,
     blind: bool = False,
 ) -> LayerSectionPlan:
     """
-    Buduje plan przebudowy sekcji warstw.
+    Builds the rebuild plan for the layer section.
 
     Records are copied piecewise, with new size fields inserted exactly
     where the old ones sat. Channel data follows the records, in the same
@@ -224,9 +226,7 @@ def plan_layer_section(  # noqa: PLR0913  - zakres, geometria i strojenie
     plan = LayerSectionPlan()
 
     channels = [
-        (layer, channel)
-        for layer in stack.layers
-        for channel in layer.channels
+        (layer, channel) for layer in stack.layers for channel in layer.channels
     ]
 
     records_end = min(
@@ -255,9 +255,7 @@ def plan_layer_section(  # noqa: PLR0913  - zakres, geometria i strojenie
         )
 
         plan.segments.append(Copy(cursor, channel.size_offset - cursor))
-        plan.segments.append(
-            Literal(result.after.to_bytes(channel.size_width, order))
-        )
+        plan.segments.append(Literal(result.after.to_bytes(channel.size_width, order)))
         cursor = channel.size_offset + channel.size_width
 
         payloads.append(payload)

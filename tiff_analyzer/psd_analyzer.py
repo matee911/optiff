@@ -1,4 +1,4 @@
-"""Analiza bloku Photoshop ImageSourceData (TIFF tag 37724)."""
+"""Analysis of the Photoshop ImageSourceData block (TIFF tag 37724)."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ class ImageSourceDataAnalyzer:
                     ParseWarning(
                         "unknown-container",
                         0,
-                        f"nieznana sygnatura kontenera {header[:40]!r}",
+                        f"unknown container signature {header[:40]!r}",
                     ),
                 ),
             )
@@ -93,7 +93,7 @@ class ImageSourceDataAnalyzer:
                     ParseWarning(
                         "unterminated-signature",
                         SIGNATURE_SIZE,
-                        f"oczekiwano NUL, jest {terminator!r}",
+                        f"expected NUL, found {terminator!r}",
                     ),
                 ),
             )

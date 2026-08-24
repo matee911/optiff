@@ -98,13 +98,13 @@ class PhysicalStorageAnalyzer:
 
         Deliberately NOT the hull `min(start)..max(end)`: foreign bytes
         sitting between strips would then count as image data and vanish
-        z raportu dziur.
+        from the report of gaps.
         """
         return merge_ranges(list(self.document.image_data_ranges()))
 
     def referenced_blocks(self) -> list[DataBlock]:
         """
-        Bloki celowo pokazywane w SIZE TREE.
+        The blocks the SIZE TREE deliberately shows.
 
         TIFF structure bytes are not included here.
         """
@@ -113,9 +113,7 @@ class PhysicalStorageAnalyzer:
         image = self.image_ranges()
 
         if image:
-            blocks.append(
-                DataBlock(name="IMAGE DATA", tag=None, ranges=tuple(image))
-            )
+            blocks.append(DataBlock(name="IMAGE DATA", tag=None, ranges=tuple(image)))
 
         for tag_number, name in self.TAG_NAMES.items():
             physical_range = self.document.tag_data_range(tag_number)

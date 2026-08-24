@@ -5,24 +5,24 @@ Section layout (everything byte-swapped like the rest of ImageSourceData:
 little-endian numbers, reversed 4-character codes)::
 
     int16   layer count (negative = the first channel is transparency)
-    N ×     rekord warstwy
+    N x     layer record
     ...     channel data, concatenated in the same order
 
-Rekord warstwy::
+Layer record::
 
     4 x int32   rectangle: top, left, bottom, right
     int16       channel count
     K x         int16 channel id + int32/int64 data size
-    "8BIM"      sygnatura trybu mieszania (na dysku "MIB8")
-    4 znaki     tryb mieszania ("norm", "mul ", ...)
-    uint8       krycie 0-255
+    "8BIM"      blend mode signature (on disk "MIB8")
+    4 chars     blend mode ("norm", "mul ", ...)
+    uint8       opacity 0-255
     uint8       clipping
-    uint8       flagi
+    uint8       flags
     uint8       filler
     int32       length of the extra section, holding:
-                  mask warstwy, zakresy mieszania,
-                  Pascal name (padded to 4 B),
-                  bloki dodatkowe 8BIM (m.in. "luni" = name Unicode)
+                  the layer mask, the blending ranges,
+                  the Pascal name (padded to 4 B),
+                  extra 8BIM blocks (among them "luni", the Unicode name)
 
 The records themselves are small; channel data (tens or hundreds of MB) is
 merely skipped over while its size is counted.
@@ -32,7 +32,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
-from tiff_analyzer.domain import ParseWarning, PhotoshopAnalysis
+from tiff_analyzer.domain import (
+    ByteOrder,
+    IntOrder,
+    ParseWarning,
+    PhotoshopAnalysis,
+    int_order,
+)
 from tiff_analyzer.readers import ByteReader
 
 #: Block keys carrying the layer name in Unicode.
@@ -197,7 +203,6 @@ class Layer:
     #: "</Layer group>".
     raw_name: str = ""
 
-
     @property
     def width(self) -> int:
         return max(0, self.right - self.left)
@@ -288,13 +293,9 @@ class Layer:
             return "none"
 
         if len(codes) == 1:
-            return COMPRESSIONS.get(
-                next(iter(codes)), f"method {next(iter(codes))}"
-            )
+            return COMPRESSIONS.get(next(iter(codes)), f"method {next(iter(codes))}")
 
-        names = sorted(
-            COMPRESSIONS.get(code, f"method {code}") for code in codes
-        )
+        names = sorted(COMPRESSIONS.get(code, f"method {code}") for code in codes)
 
         return f"mixed ({', '.join(names)})"
 
@@ -373,11 +374,11 @@ class LayerStack:
 
 class _Cursor:
     """
-    Czytnik sekcji warstw.
+    Reader for the layer section.
 
-    `byte_order` "<" to wariant osadzony w little-endian TIFF-ie: liczby
+    `byte_order` "<" is the variant embedded in a little-endian TIFF:
     little-endian numbers, reversed 4-character codes. ">" is a raw PSD/PSB
-    file: big-endian numbers, codes in normal order.
+    file: big-endian numbers, codes the right way round.
     """
 
     def __init__(
@@ -385,13 +386,13 @@ class _Cursor:
         reader: ByteReader,
         offset: int,
         end: int,
-        byte_order: str = "<",
+        byte_order: ByteOrder = "<",
     ):
         self.reader = reader
         self.offset = offset
         self.end = end
         self.byte_order = byte_order
-        self.order = "little" if byte_order == "<" else "big"
+        self.order: IntOrder = int_order(byte_order)
 
     def take(self, count: int) -> bytes:
         if count < 0 or self.offset + count > self.end:
@@ -450,7 +451,7 @@ class _Cursor:
 
 @dataclass
 class _Extra:
-    """Wynik odczytu sekcji dodatkowej rekordu warstwy."""
+    """What came out of the extra section of a layer record."""
 
     unicode_name: str = ""
     pascal_name: str = ""
@@ -463,8 +464,8 @@ def _read_extra(cursor: _Cursor, length: int, large: bool) -> _Extra:
     stop = cursor.offset + length
     extra = _Extra()
 
-    cursor.skip(cursor.uint32())  # data masks warstwy
-    cursor.skip(cursor.uint32())  # zakresy mieszania
+    cursor.skip(cursor.uint32())  # layer mask data
+    cursor.skip(cursor.uint32())  # blending ranges
 
     if cursor.offset < stop:
         extra.pascal_name = cursor.pascal_string()
@@ -478,11 +479,7 @@ def _read_extra(cursor: _Cursor, length: int, large: bool) -> _Extra:
         key = cursor.code()
         extra.keys.append(key)
 
-        size = (
-            cursor.int64()
-            if large and key in _LARGE_EXTRA_KEYS
-            else cursor.uint32()
-        )
+        size = cursor.int64() if large and key in _LARGE_EXTRA_KEYS else cursor.uint32()
 
         payload_end = cursor.offset + size
 
@@ -502,7 +499,7 @@ def _read_extra(cursor: _Cursor, length: int, large: bool) -> _Extra:
 
 
 #: Keys that carry an 8-byte length in the PSB variant, also inside
-#: sekcji dodatkowej warstwy.
+#: the extra section of a layer.
 _LARGE_EXTRA_KEYS = frozenset({"LMsk", "Lr16", "Lr32", "Layr", "lnk2", "FEid"})
 
 
@@ -532,7 +529,7 @@ def _read_layer(cursor: _Cursor, index: int, large: bool) -> tuple[Layer, _Extra
             )
         )
 
-    channels = tuple(channels)
+    frozen = tuple(channels)
 
     signature = cursor.code()
 
@@ -555,7 +552,7 @@ def _read_layer(cursor: _Cursor, index: int, large: bool) -> tuple[Layer, _Extra
         left=left,
         bottom=bottom,
         right=right,
-        channels=channels,
+        channels=frozen,
         blend_mode=blend_mode,
         opacity=opacity,
         clipping=clipping,
@@ -572,7 +569,7 @@ def _read_channel_compression(
     layers: list[Layer],
     start: int,
     end: int,
-    order: str,
+    order: IntOrder,
 ) -> list[Layer]:
     """
     Attaches the compression code to every channel.
@@ -617,12 +614,12 @@ def _resolve_groups(layers: list[Layer]) -> tuple[Layer, ...]:
     >>> def stub(index, name, section):
     ...     return Layer(index, name, 0, 0, 1, 1, (), "norm", 255, 0, 0,
     ...                  section=section, raw_name=name)
-    >>> stack = [stub(0, "Tlo", "layer"),
+    >>> stack = [stub(0, "Background", "layer"),
     ...          stub(1, "</Layer group>", "group end"),
-    ...          stub(2, "W grupie", "layer"),
+    ...          stub(2, "In the group", "layer"),
     ...          stub(3, "Color Grading", "group open")]
     >>> [(layer.name, layer.depth) for layer in _resolve_groups(stack)]
-    [('Tlo', 0), ('Color Grading', 0), ('W grupie', 1), ('Color Grading', 0)]
+    [('Background', 0), ('Color Grading', 0), ('In the group', 1), ('Color Grading', 0)]
     >>> _resolve_groups(stack)[1].raw_name
     '</Layer group>'
     """
@@ -680,10 +677,10 @@ def parse_layers(
     end: int,
     *,
     large: bool = False,
-    byte_order: str = "<",
+    byte_order: ByteOrder = "<",
 ) -> LayerStack:
     """
-    Odczytuje stos warstw z sekcji ``Lr16`` / ``Lr32`` / ``Layr``.
+    Reads the layer stack out of an ``Lr16`` / ``Lr32`` / ``Layr`` section.
 
     >>> from tiff_analyzer.readers import BytesReader
     >>> record = (
@@ -734,20 +731,14 @@ def parse_layers(
 
         layers.append(layer)
 
-    layers = _read_channel_compression(
-        reader, layers, cursor.offset, end, cursor.order
-    )
+    layers = _read_channel_compression(reader, layers, cursor.offset, end, cursor.order)
 
-    consumed = cursor.offset - start + sum(
-        layer.data_size for layer in layers
-    )
+    consumed = cursor.offset - start + sum(layer.data_size for layer in layers)
 
     # The section length is sometimes rounded up to 4 B; a few zero bytes
     # at the end are padding, not corruption.
     padding = end - start - consumed
-    aligned = 0 < padding < 4 and not any(
-        reader.read_at(start + consumed, padding)
-    )
+    aligned = 0 < padding < 4 and not any(reader.read_at(start + consumed, padding))
 
     if layers and padding != 0 and not aligned:
         warnings.append(

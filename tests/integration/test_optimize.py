@@ -1,8 +1,9 @@
 """
-Testy optymalizacji na kompletnym pliku TIFF.
+Optimization tests on a complete TIFF file.
 
-We build the file ourselves, because the layout decides whether tag 37724
-can be shortened without moving offsets.
+The files come from the case catalogue in `tests/sample_files.py`, through
+the `sample_file` fixture, because the layout decides whether tag 37724 can
+be shortened without moving offsets.
 """
 
 from __future__ import annotations
@@ -13,15 +14,8 @@ import numpy as np
 import pytest
 import tifffile
 
-from tests.unit.builders import (
-    build_tiff,
-    layer_record,
-    layer_record_be,
-    layer_section,
-    layer_section_be,
-    link_record_with_psb,
-    psd_container,
-)
+from tests.sample_files import ROWS, WIDTH
+from tests.unit.builders import psd_container
 from tiff_analyzer import optimize as optimize_module
 from tiff_analyzer.document import TiffDocument
 from tiff_analyzer.optimize import (
@@ -31,80 +25,15 @@ from tiff_analyzer.optimize import (
     plan_file,
 )
 from tiff_analyzer.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
-from tiff_analyzer.psd_codec import RAW
 from tiff_analyzer.psd_file import parse_document
 from tiff_analyzer.psd_links import parse_links, read_linked_files
 from tiff_analyzer.verify import channel_digests
 
-WIDTH, ROWS = 96, 24
-HEADER = 2
-
-
-def smooth(seed: int) -> bytes:
-    """Smooth 16-bit data that compresses like a real photographic layer."""
-    rng = np.random.default_rng(seed)
-    walk = np.cumsum(rng.integers(-4, 5, size=(ROWS, WIDTH)), axis=1)
-
-    return (walk % 65536).astype(">u2").tobytes()
-
-
-def layers_blob(count: int = 3) -> bytes:
-    """A layer section with raw channels plus their data."""
-    payloads = [smooth(index + 1) for index in range(count)]
-
-    section = layer_section(
-        layer_record(
-            name="Tlo",
-            bounds=(0, 0, ROWS, WIDTH),
-            channels=tuple(
-                (index, len(data) + HEADER)
-                for index, data in enumerate(payloads)
-            ),
-        )
-    )
-
-    return section + b"".join(
-        RAW.to_bytes(HEADER, "little") + data for data in payloads
-    )
-
-
-def layers_blob_be(count: int = 3) -> bytes:
-    """A raw PSB layer section: big-endian, RAW channels."""
-    payloads = [smooth(index + 1) for index in range(count)]
-
-    section = layer_section_be(
-        layer_record_be(
-            bounds=(0, 0, ROWS, WIDTH),
-            channels=tuple(
-                (index, len(data) + HEADER)
-                for index, data in enumerate(payloads)
-            ),
-        )
-    )
-
-    return section + b"".join(
-        RAW.to_bytes(HEADER, "big") + data for data in payloads
-    )
-
-
-def write_source(directory: Path, *, photoshop_last: bool = True) -> Path:
-    path = directory / "source.tif"
-
-    path.write_bytes(
-        build_tiff(
-            psd_container(("Lr16", layers_blob())),
-            width=WIDTH,
-            height=ROWS,
-            photoshop_last=photoshop_last,
-        )
-    )
-
-    return path
-
 
 @pytest.fixture
-def source(tmp_path: Path) -> Path:
-    return write_source(tmp_path)
+def source(sample_file) -> Path:
+    """Layers stored raw - the case most of these tests are about."""
+    return sample_file("raw-layers")
 
 
 # ============================================================================
@@ -128,6 +57,7 @@ def test_verification_passes(source: Path, tmp_path: Path):
 
     # Assert
     assert result.verified
+    assert result.comparison is not None
     assert result.comparison.total > 0
     assert result.comparison.problems == ()
 
@@ -164,6 +94,8 @@ def test_channel_pixels_are_identical(source: Path, tmp_path: Path):
         with TiffDocument(path) as document:
             analysis = TiffPhotoshopAnalyzer(analyzer).analyze(document)
             reader = document.photoshop_source_reader()
+
+            assert reader is not None, "the file has no tag 37724"
 
             try:
                 return [item.digest for item in channel_digests(reader, analysis)]
@@ -225,9 +157,9 @@ def test_result_is_idempotent(source: Path, tmp_path: Path):
 # ============================================================================
 
 
-def test_refuses_when_tag_is_not_last(tmp_path: Path):
+def test_refuses_when_tag_is_not_last(sample_file, tmp_path: Path):
     # Arrange - obraz zapisany PO tagu 37724
-    path = write_source(tmp_path, photoshop_last=False)
+    path = sample_file("photoshop-not-last")
 
     # Act / Assert
     with pytest.raises(OptimizeError, match="not last in the file"):
@@ -252,10 +184,11 @@ def test_refuses_file_without_photoshop_tag(tmp_path: Path):
 
 def test_creates_missing_output_directory(source: Path, tmp_path: Path):
     # Act
-    result = optimize(source, tmp_path / "new" / "katalog" / "result.tif")
+    result = optimize(source, tmp_path / "new" / "directory" / "result.tif")
 
     # Assert
     assert result.wrote_file
+    assert result.output is not None
     assert result.output.exists()
 
 
@@ -278,7 +211,7 @@ def test_output_still_parses_as_tiff(source: Path, tmp_path: Path):
 
     # Assert
     with tifffile.TiffFile(output) as handle:
-        page = handle.pages[0]
+        page = handle.pages.first
 
         assert page.imagewidth == WIDTH
         assert page.imagelength == ROWS
@@ -315,8 +248,7 @@ def test_saving_decomposition_adds_up(source: Path, tmp_path: Path):
 
     # Assert
     assert (
-        result.channel_saved + result.padding_saved + result.tail_saved
-        == result.saved
+        result.channel_saved + result.padding_saved + result.tail_saved == result.saved
     )
 
 
@@ -379,22 +311,15 @@ def test_throughput_is_reported(source: Path, tmp_path: Path):
 
 
 # ============================================================================
-# OSADZONY SMART OBJECT
+# EMBEDDED SMART OBJECT
 # ============================================================================
 
 
-def test_linked_record_tail_survives(tmp_path: Path):
-    # Arrange - rekord lnk2 niesie za danymi pliku identyfikator, elapsed
-    # modyfikacji i blokade; ucinanie ich psuje file dla Photoshopa
-    path = tmp_path / "z_linkiem.tif"
-    path.write_bytes(
-        build_tiff(
-            psd_container(("lnk2", link_record_with_psb(layers_blob_be()))),
-            width=WIDTH,
-            height=ROWS,
-        )
-    )
-
+def test_linked_record_tail_survives(sample_file, tmp_path: Path):
+    # Arrange - behind the file data an lnk2 record carries an identifier,
+    # a modification time and a lock; cutting them breaks the file for
+    # Photoshop
+    path = sample_file("smart-object")
     output = tmp_path / "result.tif"
 
     def record(target: Path):
@@ -403,6 +328,8 @@ def test_linked_record_tail_survives(tmp_path: Path):
         with TiffDocument(target) as document:
             analysis = TiffPhotoshopAnalyzer(analyzer).analyze(document)
             reader = document.photoshop_source_reader()
+
+            assert reader is not None, "the file has no tag 37724"
 
             try:
                 block = next(b for b in analysis.blocks if b.key == "lnk2")
@@ -417,7 +344,7 @@ def test_linked_record_tail_survives(tmp_path: Path):
 
     before, tail_before = record(path)
 
-    assert before.tail_size == 15, "fixture ma miec ogon jak realne files"
+    assert before.tail_size == 15, "the fixture needs a tail like real files"
 
     # Act
     result = optimize(path, output)
@@ -432,16 +359,9 @@ def test_linked_record_tail_survives(tmp_path: Path):
     assert after.size < before.size
 
 
-def test_embedded_psb_shrinks_and_still_parses(tmp_path: Path):
+def test_embedded_psb_shrinks_and_still_parses(sample_file, tmp_path: Path):
     # Arrange
-    path = tmp_path / "z_linkiem.tif"
-    path.write_bytes(
-        build_tiff(
-            psd_container(("lnk2", link_record_with_psb(layers_blob_be()))),
-            width=WIDTH,
-            height=ROWS,
-        )
-    )
+    path = sample_file("smart-object")
     output = tmp_path / "result.tif"
 
     # Act
@@ -454,10 +374,14 @@ def test_embedded_psb_shrinks_and_still_parses(tmp_path: Path):
         analysis = TiffPhotoshopAnalyzer(analyzer).analyze(document)
         reader = document.photoshop_source_reader()
 
+        assert reader is not None, "the file has no tag 37724"
+
         try:
             assert analysis.warnings == ()
 
             linked = read_linked_files(analysis, reader)
+
+            assert linked is not None, "no block with linked smart objects"
             assert linked.is_exact
             assert linked.warnings == ()
 
@@ -472,24 +396,8 @@ def test_embedded_psb_shrinks_and_still_parses(tmp_path: Path):
 
 
 # ============================================================================
-# KOMPRESJA PIKSELI OBRAZU
+# IMAGE PIXEL COMPRESSION
 # ============================================================================
-
-
-def compressible_source(directory: Path) -> Path:
-    """TIFF z gladkimi pikselami, ktore da sie skompresowac."""
-    path = directory / "gladki.tif"
-
-    path.write_bytes(
-        build_tiff(
-            psd_container(("Lr16", layers_blob())),
-            width=WIDTH,
-            height=ROWS,
-            image=smooth(99) * 3,
-        )
-    )
-
-    return path
 
 
 def test_image_data_is_off_by_default(source: Path, tmp_path: Path):
@@ -501,9 +409,9 @@ def test_image_data_is_off_by_default(source: Path, tmp_path: Path):
     assert result.image_saved == 0
 
 
-def test_image_data_shrinks_when_enabled(tmp_path: Path):
+def test_image_data_shrinks_when_enabled(sample_file, tmp_path: Path):
     # Arrange
-    path = compressible_source(tmp_path)
+    path = sample_file("compressible-image")
     output = tmp_path / "result.tif"
 
     # Act
@@ -515,21 +423,21 @@ def test_image_data_shrinks_when_enabled(tmp_path: Path):
     assert result.verified
 
 
-def test_image_pixels_survive_compression(tmp_path: Path):
+def test_image_pixels_survive_compression(sample_file, tmp_path: Path):
     # Arrange
-    path = compressible_source(tmp_path)
+    path = sample_file("compressible-image")
     output = tmp_path / "result.tif"
 
     # Act
     optimize(path, output, image_data=True)
 
-    # Assert - tifffile rozpakowuje i musi dostac te same piksele
+    # Assert - tifffile decompresses and must get the same pixels back
     assert np.array_equal(tifffile.imread(path), tifffile.imread(output))
 
 
-def test_compression_tag_is_updated(tmp_path: Path):
+def test_compression_tag_is_updated(sample_file, tmp_path: Path):
     # Arrange
-    path = compressible_source(tmp_path)
+    path = sample_file("compressible-image")
     output = tmp_path / "result.tif"
 
     # Act
@@ -537,15 +445,17 @@ def test_compression_tag_is_updated(tmp_path: Path):
 
     # Assert
     with tifffile.TiffFile(output) as handle:
-        page = handle.pages[0]
+        page = handle.pages.first
 
         assert int(page.compression) == 8
         assert page.databytecounts[0] < page.imagewidth * page.imagelength * 6
 
 
-def test_photoshop_tag_still_readable_after_image_compression(tmp_path: Path):
-    # Arrange - offsety za obrazem musza sie przesunac
-    path = compressible_source(tmp_path)
+def test_photoshop_tag_still_readable_after_image_compression(
+    sample_file, tmp_path: Path
+):
+    # Arrange - offsets behind the image have to move
+    path = sample_file("compressible-image")
     output = tmp_path / "result.tif"
 
     # Act
@@ -564,7 +474,7 @@ def test_photoshop_tag_still_readable_after_image_compression(tmp_path: Path):
 
 def test_refuses_already_compressed_image(tmp_path: Path):
     # Arrange
-    path = tmp_path / "spakowany.tif"
+    path = tmp_path / "already-packed.tif"
     tifffile.imwrite(
         path,
         np.zeros((ROWS, WIDTH, 3), dtype=np.uint16),
@@ -578,10 +488,10 @@ def test_refuses_already_compressed_image(tmp_path: Path):
         plan_file(path, image_data=True)
 
 
-def test_shifted_offsets_stay_even(tmp_path: Path):
+def test_shifted_offsets_stay_even(sample_file, tmp_path: Path):
     # Arrange - TIFF wymaga parzystych offsetow wartosci; skrocenie obrazu
-    # o nieparzysta liczbe bajtow przesunelo by wszystko na nieparzyste
-    path = compressible_source(tmp_path)
+    # by an odd number of bytes would push everything onto odd addresses
+    path = sample_file("compressible-image")
     output = tmp_path / "result.tif"
 
     # Act
@@ -591,54 +501,54 @@ def test_shifted_offsets_stay_even(tmp_path: Path):
     assert result.image_saved % 2 == 0
 
     with tifffile.TiffFile(output) as handle:
-        page = handle.pages[0]
+        page = handle.pages.first
 
         for tag in page.tags.values():
             if tag.valuebytecount > 4:
-                assert tag.valueoffset % 2 == 0, f"{tag.name} na nieparzystym"
+                assert tag.valueoffset % 2 == 0, f"{tag.name} sits on an odd address"
 
 
-def test_strip_byte_count_excludes_padding(tmp_path: Path):
+def test_strip_byte_count_excludes_padding(sample_file, tmp_path: Path):
     # Arrange
-    path = compressible_source(tmp_path)
+    path = sample_file("compressible-image")
     output = tmp_path / "result.tif"
 
     # Act
     result = optimize(path, output, image_data=True)
 
-    # Assert - deklarowana dlugosc to same data; dopelnienie jest poza nia,
-    # a mimo to obraz musi sie rozpakowac w calosci
+    # Assert - the declared length covers the data only; the padding sits
+    # outside it, and the image still has to decompress in full
     with tifffile.TiffFile(output) as handle:
-        declared = handle.pages[0].databytecounts[0]
+        declared = handle.pages.first.databytecounts[0]
 
         assert declared <= result.image_after
         assert np.array_equal(handle.asarray(), tifffile.imread(path))
 
 
-def test_second_pass_skips_pixels_instead_of_failing(tmp_path: Path):
-    """Przejechanie drugi raz po wlasnym wyniku nie moze wywalic calosci."""
-    # Arrange - pierwszy przebieg pakuje i warstwy, i piksele
-    path = compressible_source(tmp_path)
-    pierwszy = tmp_path / "raz.tif"
-    optimize(path, pierwszy, image_data=True)
+def test_second_pass_skips_pixels_instead_of_failing(sample_file, tmp_path: Path):
+    """A second pass over our own result must not blow the whole run up."""
+    # Arrange - the first pass packs both the layers and the pixels
+    path = sample_file("compressible-image")
+    first = tmp_path / "pass1.tif"
+    optimize(path, first, image_data=True)
 
-    # Act - ten sam file jeszcze raz, tym samym przelacznikiem
-    result = optimize(pierwszy, tmp_path / "dwa.tif", image_data=True)
+    # Act - the same file once more, with the same switch
+    result = optimize(first, tmp_path / "pass2.tif", image_data=True)
 
     # Assert
     assert result.skipped
     assert any("image pixels skipped" in note for note in result.notes)
 
 
-def test_compresses_pixels_when_layers_are_already_done(tmp_path: Path):
-    """Warstwy spakowane, piksele nie - robimy same piksele."""
-    # Arrange - pierwszy przebieg tyka wylacznie warstwy
-    path = compressible_source(tmp_path)
-    pierwszy = tmp_path / "warstwy.tif"
-    optimize(path, pierwszy, image_data=False)
+def test_compresses_pixels_when_layers_are_already_done(sample_file, tmp_path: Path):
+    """Layers packed, pixels not - so we do the pixels alone."""
+    # Arrange - the first pass touches the layers only
+    path = sample_file("compressible-image")
+    first = tmp_path / "layers.tif"
+    optimize(path, first, image_data=False)
 
     # Act
-    result = optimize(pierwszy, tmp_path / "piksele.tif", image_data=True)
+    result = optimize(first, tmp_path / "pixels.tif", image_data=True)
 
     # Assert
     assert not result.skipped
@@ -647,37 +557,9 @@ def test_compresses_pixels_when_layers_are_already_done(tmp_path: Path):
     assert result.verified
 
 
-def mask_blob() -> bytes:
-    """
-    Sekcja z warstwa korekcyjna: prostokat 0x0, a mask niesie data.
-
-    This is what real adjustment layers look like: they have no
-    pixels of their own, so their rectangle is zero, yet the mask has its
-    wlasny i potrafi wazyc dziesiatki megabajtow.
-    """
-    mask = smooth(7)
-
-    section = layer_section(
-        layer_record(
-            name="Black & White 1",
-            bounds=(0, 0, 0, 0),
-            channels=((-2, len(mask) + HEADER),),
-        )
-    )
-
-    return section + RAW.to_bytes(HEADER, "little") + mask
-
-
-def mask_source(directory: Path) -> Path:
-    path = directory / "mask.tif"
-    path.write_bytes(build_tiff(psd_container(("Lr16", mask_blob()))))
-
-    return path
-
-
-def test_zero_rect_channel_is_left_alone_by_default(tmp_path: Path):
+def test_zero_rect_channel_is_left_alone_by_default(sample_file, tmp_path: Path):
     # Arrange
-    path = mask_source(tmp_path)
+    path = sample_file("adjustment-mask")
 
     # Act
     result = optimize(path, tmp_path / "result.tif")
@@ -687,9 +569,9 @@ def test_zero_rect_channel_is_left_alone_by_default(tmp_path: Path):
     assert result.skipped
 
 
-def test_zip_fallback_packs_zero_rect_channel(tmp_path: Path):
+def test_zip_fallback_packs_zero_rect_channel(sample_file, tmp_path: Path):
     # Arrange
-    path = mask_source(tmp_path)
+    path = sample_file("adjustment-mask")
     output = tmp_path / "result.tif"
 
     # Act
@@ -699,18 +581,18 @@ def test_zip_fallback_packs_zero_rect_channel(tmp_path: Path):
     assert not result.skipped
     assert result.channels_changed == 1
     assert result.size_after < result.size_before
-    assert result.verified, "SHA256 musi sie zgadzac mimo braku geometrii"
+    assert result.verified, "SHA256 has to match even with no geometry"
 
 
-def test_zip_fallback_keeps_pixels_bit_for_bit(tmp_path: Path):
+def test_zip_fallback_keeps_pixels_bit_for_bit(sample_file, tmp_path: Path):
     # Arrange
-    path = mask_source(tmp_path)
+    path = sample_file("adjustment-mask")
     output = tmp_path / "result.tif"
 
     # Act
     optimize(path, output, zip_fallback=True)
 
-    # Assert - channel wynikowy rozpakowany musi dac dokladnie zrodlowe piksele
+    # Assert - the resulting channel must decode to exactly the source pixels
     before = channel_digests_of(path)
     after = channel_digests_of(output)
 

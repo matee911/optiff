@@ -3,8 +3,8 @@ Fixtures for the integration and e2e tests.
 
 By default the tests run on synthetic TIFFs built on the fly, so `pytest`
 needs none of the multi-gigabyte production files. Tests against real files
-are marked `slow` / `bigfile` and are
-odznaczone (patrz `addopts` w pyproject.toml).
+are marked `slow` / `bigfile` and are deselected by default (see `addopts`
+in pyproject.toml).
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 import tifffile
 
+from tests.sample_files import CASES, write
 from tests.unit.builders import psd_container
 
 PHOTOSHOP_TAG = 37724
@@ -26,7 +27,7 @@ XMP_SAMPLE = (
     b'<?xpacket begin="\xef\xbb\xbf" id="W5M0MpCehiHzreSzNTczkc9d"?>'
     b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
     b'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
-    b"</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+    b'</rdf:RDF></x:xmpmeta><?xpacket end="w"?>'
 )
 
 
@@ -129,7 +130,7 @@ def synthetic_tiff(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def psd_blob() -> bytes:
     """Tag 37724 content built with the same builder the unit tests use."""
     return psd_container(
-        ("Lr16", b"warstwy" * 64),
+        ("Lr16", b"layers" * 64),
         ("LMsk", b"\x00" * 14),
         ("Pat2", b""),
         ("CAI ", b"content-credentials"),
@@ -143,7 +144,7 @@ def synthetic_psd_tiff(
     tmp_path_factory: pytest.TempPathFactory,
     psd_blob: bytes,
 ) -> Path:
-    """TIFF z realistycznym blokiem Photoshop ImageSourceData i XMP."""
+    """A TIFF with a realistic Photoshop ImageSourceData block and XMP."""
     path = tmp_path_factory.mktemp("tiff") / "psd.tif"
 
     return _write(
@@ -161,3 +162,30 @@ def synthetic_striped_tiff(tmp_path_factory: pytest.TempPathFactory) -> Path:
     path = tmp_path_factory.mktemp("tiff") / "striped.tif"
 
     return _write(path, rowsperstrip=8)
+
+
+@pytest.fixture
+def sample_file(tmp_path: Path):
+    """
+    Generates one file from the case catalogue and returns its path.
+
+    The cases were found in real client files, which must never enter the
+    repository, so what is kept is the recipe rather than the file. See
+    `tests/sample_files.py` for what each case reproduces.
+
+        def test_something(sample_file):
+            path = sample_file("adjustment-mask")
+    """
+
+    def make(name: str) -> Path:
+        return write(name, tmp_path)
+
+    return make
+
+
+@pytest.fixture(scope="session")
+def every_sample(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """Every case, generated once per session, for tests that only read."""
+    directory = tmp_path_factory.mktemp("samples")
+
+    return {name: write(name, directory) for name in sorted(CASES)}

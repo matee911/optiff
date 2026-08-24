@@ -5,18 +5,18 @@ The block is a run of records, each describing one embedded or external file::
 
     int64       record length (excluding this field)
     4 chars     type: "liFD" embedded, "liFE" external, "liFA" alias
-    uint32      wersja rekordu
-    pascal      identyfikator (UUID)
-    unicode     oryginalna name pliku
-    4 znaki     typ pliku ("8BPS" = PSD, "8BPB" = PSB)
+    uint32      record version
+    pascal      identifier (UUID)
+    unicode     original file name
+    4 chars     file type ("8BPS" = PSD, "8BPB" = PSB)
     4 chars     creator ("8BIM")
     int64       file data length
-    uint8       czy jest deskryptor otwarcia
-    [uint32 wersja + deskryptor]
-    ...         surowe data_bytes pliku (dla "liFD")
+    uint8       whether an opening descriptor follows
+    [uint32 version + descriptor]
+    ...         the raw file bytes (for "liFD")
 
 The next record sits at ``start + 8 + align4(length)``, verified
-empirycznie na plikach produkcyjnych.
+empirically on production files.
 
 We never read the file data; we only care what is linked and how big it is.
 """
@@ -40,7 +40,7 @@ LINK_KINDS: dict[str, str] = {
     "liFA": "alias",
 }
 
-#: Kody typu pliku spotykane w smart objectach.
+#: File type codes seen in smart objects.
 FILE_TYPES: dict[str, str] = {
     "8BPS": "PSD",
     "8BPB": "PSB",
@@ -80,7 +80,7 @@ class LinkedFile:
 
     @property
     def data_end(self) -> int:
-        """Pierwszy bajt za danymi osadzonego pliku."""
+        """The first byte past the embedded file data."""
         return self.data_offset + self.size
 
     @property
@@ -91,12 +91,12 @@ class LinkedFile:
     @property
     def tail_size(self) -> int:
         """
-        Pola zapisane ZA danymi pliku.
+        The fields written BEHIND the file data.
 
-        Od wersji 5 rekord niesie jeszcze identyfikator dokumentu (Unicode),
+        From version 5 the record also carries a document identifier
         from 6 a modification time (double), from 7 a lock state (byte):
         15 bytes altogether in Photoshop files. They must be carried over
-        przebudowie, inaczej rekord jest niekompletny.
+        rebuild, or the record comes out incomplete.
         """
         return max(0, self.record_end - self.data_end)
 
@@ -149,7 +149,7 @@ class _Cursor:
 
     def take(self, count: int) -> bytes:
         if count < 0 or self.offset + count > self.end:
-            raise ValueError(f"odczyt {count} B poza blokiem @0x{self.offset:X}")
+            raise ValueError(f"read of {count} B past the block @0x{self.offset:X}")
 
         chunk = self.reader.read_at(self.offset, count)
         self.offset += count
@@ -188,7 +188,7 @@ def _read_record(cursor: _Cursor, index: int) -> LinkedFile:
     kind = cursor.code()
 
     if kind not in LINK_KINDS:
-        raise ValueError(f"nieznany typ rekordu {kind!r}")
+        raise ValueError(f"unknown record type {kind!r}")
 
     version = cursor.uint32()
     uid = cursor.pascal_string()
@@ -227,9 +227,9 @@ _DESCRIPTOR_WINDOW = 1 << 16
 
 def _skip_open_descriptor(cursor: _Cursor) -> None:
     """
-    Przesuwa kursor za deskryptor otwarcia pliku.
+    Moves the cursor past the file's opening descriptor.
 
-    Deskryptor poprzedza 4-bajtowa wersja, a sam jest w wariancie
+    The descriptor is preceded by a 4-byte version, and is itself
     byte-swapped, exactly like the rest of ImageSourceData.
     """
     window = cursor.reader.read_at(
@@ -240,7 +240,7 @@ def _skip_open_descriptor(cursor: _Cursor) -> None:
     try:
         result = parse_descriptor(window, 4)
     except DescriptorError as error:
-        raise ValueError(f"deskryptor otwarcia: {error}") from error
+        raise ValueError(f"opening descriptor: {error}") from error
 
     cursor.offset += result.consumed
 
@@ -299,7 +299,7 @@ def parse_links(reader: ByteReader, start: int, end: int) -> LinkedFiles:
                     "link-record-overrun",
                     record_start,
                     f"the record reaches {cursor.offset - start} B "
-                    f"przy bloku {end - start} B",
+                    f"in a block of {end - start} B",
                 )
             )
             cursor.offset = end
@@ -315,7 +315,7 @@ def parse_links(reader: ByteReader, start: int, end: int) -> LinkedFiles:
                 ParseWarning(
                     "link-trailing-bytes",
                     cursor.offset,
-                    f"{end - cursor.offset} B poza rekordami",
+                    f"{end - cursor.offset} B outside the records",
                 )
             )
 
@@ -331,7 +331,7 @@ def read_linked_files(
     analysis: PhotoshopAnalysis,
     reader: ByteReader,
 ) -> LinkedFiles | None:
-    """Znajduje blok z podlinkowanymi obiektami i odczytuje go."""
+    """Finds the block with the linked objects and reads it."""
     block = next(
         (
             item

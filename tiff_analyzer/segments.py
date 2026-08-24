@@ -165,9 +165,7 @@ def write_plan(plan: Plan, reader: ByteReader, output: BinaryIO) -> int:
             chunk = reader.read_at(cursor, min(CHUNK, remaining))
 
             if not chunk:
-                raise ValueError(
-                    f"source ended mid-copy @0x{cursor:X}"
-                )
+                raise ValueError(f"source ended mid-copy @0x{cursor:X}")
 
             output.write(chunk)
             written += len(chunk)

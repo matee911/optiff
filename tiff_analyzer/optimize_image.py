@@ -20,6 +20,7 @@ import zlib
 from dataclasses import dataclass, field
 
 from tiff_analyzer.document import DATATYPE_ITEMSIZE
+from tiff_analyzer.domain import IntOrder
 
 #: Adobe Deflate: what Photoshop writes and all three applications read.
 ADOBE_DEFLATE = 8
@@ -65,7 +66,7 @@ class ImageDataError(RuntimeError):
     """The image data cannot be compressed safely."""
 
 
-def _u32(value: int, order: str) -> bytes:
+def _u32(value: int, order: IntOrder) -> bytes:
     return value.to_bytes(4, order)
 
 
@@ -89,7 +90,7 @@ def can_compress(page) -> str:
     if len(page.dataoffsets) != 1:
         return (
             f"the image has {len(page.dataoffsets)} strips; this version supports "
-            f"tylko jeden"
+            f"just one"
         )
 
     if PREDICTOR_TAG in page.tags:
@@ -105,13 +106,13 @@ def plan_image_data(
     reader,
     page,
     *,
-    order: str = "little",
+    order: IntOrder = "little",
     level: int = 6,
 ) -> ImagePlan | None:
     """
     Compresses the pixels and prepares the patches for the IFD entries.
 
-    Zwraca `None`, gdy kompresja nic nie daje. Rzuca `ImageDataError`,
+    Returns `None` when compression gains nothing. Raises `ImageDataError`
     when the file cannot be touched safely.
     """
     reason = can_compress(page)
@@ -125,9 +126,7 @@ def plan_image_data(
     raw = reader.read_at(start, size)
 
     if len(raw) != size:
-        raise ImageDataError(
-            f"odczytano {len(raw)} B pikseli, oczekiwano {size}"
-        )
+        raise ImageDataError(f"read {len(raw)} B of pixels, expected {size}")
 
     packed = zlib.compress(raw, level)
 
@@ -144,7 +143,7 @@ def plan_image_data(
         )
 
     patches = [
-        # method kompresji: 1 -> 8
+        # compression method: 1 -> 8
         (
             page.tags[COMPRESSION_TAG].offset + VALUE_FIELD,
             _u32(ADOBE_DEFLATE, order),
@@ -169,7 +168,7 @@ def plan_image_data(
 SUB_IFD_TAGS = (34665, 34853, 40965)
 
 
-def _sub_ifd_patches(reader, offset, delta, boundary, order):
+def _sub_ifd_patches(reader, offset, delta, boundary, order: IntOrder):
     """Patches for sub-IFD entry values sitting past the boundary."""
     count = int.from_bytes(reader.read_at(offset, 2), order)
 
@@ -198,7 +197,7 @@ def _sub_ifd_patches(reader, offset, delta, boundary, order):
     return patches
 
 
-def shift_patches(reader, page, *, delta, boundary, order="little"):
+def shift_patches(reader, page, *, delta, boundary, order: IntOrder = "little"):
     """
     Patches that shift by `delta` every offset pointing past `boundary`.
 

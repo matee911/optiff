@@ -17,11 +17,11 @@ not in the tag size (which can reach 2.7 GB).
 
 from __future__ import annotations
 
-from tiff_analyzer.domain import ParseWarning, PhotoshopBlock
+from tiff_analyzer.domain import ByteOrder, ParseWarning, PhotoshopBlock
 from tiff_analyzer.readers import ByteReader
 
 #: on-disk signature -> (logical signature, byte order, length size, header size)
-LAYOUTS: dict[bytes, tuple[str, str, int, int]] = {
+LAYOUTS: dict[bytes, tuple[str, ByteOrder, int, int]] = {
     b"8BIM": ("8BIM", ">", 4, 12),
     b"MIB8": ("8BIM", "<", 4, 12),
     b"8B64": ("8B64", ">", 8, 16),
@@ -90,7 +90,7 @@ def align4(value: int) -> int:
     return (value + 3) & ~3
 
 
-def detect_layout(signature: bytes) -> tuple[str, str, int, int] | None:
+def detect_layout(signature: bytes) -> tuple[str, ByteOrder, int, int] | None:
     """
     Recognises the block layout from the raw signature.
 
@@ -109,7 +109,7 @@ def detect_layout(signature: bytes) -> tuple[str, str, int, int] | None:
     return LAYOUTS.get(signature)
 
 
-def logical_key(raw_key: str, byte_order: str) -> str:
+def logical_key(raw_key: str, byte_order: ByteOrder) -> str:
     """
     The key in logical form, reversed when the stream is little-endian.
 
@@ -125,7 +125,7 @@ def logical_key(raw_key: str, byte_order: str) -> str:
 
 def describe_key(key: str) -> str:
     """
-    Opis zasobu dla klucza logicznego.
+    The description of a resource, by its logical key.
 
     >>> describe_key("Lr16")
     'Layers (16-bit)'
@@ -172,7 +172,7 @@ def walk(
     warnings: list[ParseWarning] = []
 
     cursor = start
-    stream_order: str | None = None
+    stream_order: ByteOrder | None = None
 
     while cursor < end:
         remaining = end - cursor
@@ -183,7 +183,7 @@ def walk(
                     ParseWarning(
                         "trailing-bytes",
                         cursor,
-                        f"{remaining} B poza jakimkolwiek blokiem",
+                        f"{remaining} B outside any block",
                     )
                 )
             break
@@ -241,8 +241,7 @@ def walk(
                 ParseWarning(
                     "length-overrun",
                     cursor,
-                    f"length {size} exceeds the available "
-                    f"{remaining - header_size} B",
+                    f"length {size} exceeds the available {remaining - header_size} B",
                 )
             )
             break

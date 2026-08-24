@@ -3,10 +3,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
+
+#: Byte order the way TIFF and `struct` spell it.
+ByteOrder = Literal["<", ">"]
+
+#: The same thing the way `int.from_bytes` and `int.to_bytes` spell it. Two
+#: spellings of one idea, kept apart so a mix-up is a type error rather than a
+#: number read backwards.
+IntOrder = Literal["little", "big"]
+
+
+def int_order(byte_order: ByteOrder) -> IntOrder:
+    """
+    Translates between the two spellings.
+
+    >>> int_order("<"), int_order(">")
+    ('little', 'big')
+    """
+    return "little" if byte_order == "<" else "big"
+
 
 # ============================================================================
-# ZAKRESY FIZYCZNE
+# PHYSICAL RANGES
 # ============================================================================
 
 
@@ -85,7 +104,7 @@ class ImageInfo:
 
 @dataclass(frozen=True)
 class ParseWarning:
-    """Strukturalny problem napotkany przy chodzeniu po blokach."""
+    """A structural problem met while walking the blocks."""
 
     code: str
     offset: int
@@ -95,7 +114,7 @@ class ParseWarning:
 @dataclass(frozen=True)
 class PhotoshopBlock:
     """
-    Pojedynczy blok ImageSourceData.
+    A single ImageSourceData block.
 
     Separates the on-disk form from the logical one: in a little-endian
     TIFF, Photoshop writes the signature and the key byte-reversed
@@ -113,13 +132,13 @@ class PhotoshopBlock:
     payload_offset: int
     raw_signature: bytes
     raw_key: str
-    byte_order: str
+    byte_order: ByteOrder
     header_size: int
 
     @property
     def end(self) -> int:
         """
-        Offset pierwszego bajtu za blokiem (razem z paddingiem).
+        Offset of the first byte past the block, padding included.
 
         >>> block = PhotoshopBlock(
         ...     "8BIM", "Lr16", 36, 7, 20, "Layers (16-bit)",

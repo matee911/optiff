@@ -27,9 +27,7 @@ def calculate_entropy(data: bytes) -> float:
 
     # The minus sign lives inside sum(): sum() starts from int 0, so
     # 0 + (-0.0) == 0.0. Writing -sum(...) would yield -0.0 for uniform data.
-    return sum(
-        -(count / size) * math.log2(count / size) for count in counts.values()
-    )
+    return sum(-(count / size) * math.log2(count / size) for count in counts.values())
 
 
 def format_size(size: int) -> str:

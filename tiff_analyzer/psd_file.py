@@ -1,9 +1,9 @@
 """
-Parser osadzonego pliku PSD / PSB.
+Parser for an embedded PSD / PSB file.
 
 Smart objects sit inside the ``lnk2`` block as **raw files**. Unlike the
 rest of ImageSourceData they are not byte-swapped but stored normally,
-czyli big-endian.
+which is to say big-endian.
 
 File layout::
 
@@ -33,7 +33,7 @@ SIGNATURE = b"8BPS"
 
 HEADER_SIZE = 26
 
-#: Wersja pliku -> name formatu.
+#: File version -> format name.
 VERSIONS: dict[int, str] = {1: "PSD", 2: "PSB"}
 
 #: Colour modes from the header.
@@ -48,7 +48,7 @@ COLOR_MODES: dict[int, str] = {
     9: "Lab",
 }
 
-#: Metody kompresji sekcji Image Data.
+#: Compression methods of the Image Data section.
 COMPRESSIONS: dict[int, str] = {
     0: "RAW",
     1: "RLE",
@@ -147,14 +147,10 @@ class EmbeddedDocument:
     @property
     def accounted(self) -> int:
         """Sum of the section sizes plus the header."""
-        return HEADER_SIZE + sum(
-            section.total_size for section in self.sections
-        )
+        return HEADER_SIZE + sum(section.total_size for section in self.sections)
 
     def section(self, name: str) -> FileSection | None:
-        return next(
-            (item for item in self.sections if item.name == name), None
-        )
+        return next((item for item in self.sections if item.name == name), None)
 
 
 class _Cursor:
@@ -215,9 +211,7 @@ def _read_layer_and_mask(
             end = min(inner.offset + layer_info_size, section.end)
 
             return (
-                parse_layers(
-                    reader, inner.offset, end, large=large, byte_order=">"
-                ),
+                parse_layers(reader, inner.offset, end, large=large, byte_order=">"),
                 warnings,
             )
 
@@ -227,9 +221,7 @@ def _read_layer_and_mask(
         global_mask_size = inner.uint32()
         inner.offset = inner.offset + global_mask_size
     except DocumentError as error:
-        warnings.append(
-            ParseWarning("embedded-layer-info", section.offset, str(error))
-        )
+        warnings.append(ParseWarning("embedded-layer-info", section.offset, str(error)))
         return None, warnings
 
     blocks, block_warnings = walk(
@@ -238,9 +230,7 @@ def _read_layer_and_mask(
 
     warnings.extend(block_warnings)
 
-    block = next(
-        (item for item in blocks if item.key in LAYER_SECTION_KEYS), None
-    )
+    block = next((item for item in blocks if item.key in LAYER_SECTION_KEYS), None)
 
     if block is None:
         return None, warnings
@@ -276,7 +266,7 @@ def parse_document(
     ...     (0).to_bytes(4, "big")          # Color Mode Data
     ...     + (4).to_bytes(4, "big") + b"abcd"   # Image Resources
     ...     + (0).to_bytes(8, "big")        # Layer and Mask Information
-    ...     + (1).to_bytes(2, "big")        # kompresja Image Data
+    ...     + (1).to_bytes(2, "big")        # Image Data compression
     ... )
     >>> data = header + body
     >>> doc = parse_document(BytesReader(data), 0, len(data))
@@ -342,25 +332,17 @@ def parse_document(
     if cursor.offset + 2 <= end:
         compression = int.from_bytes(reader.read_at(cursor.offset, 2), "big")
 
-    sections.append(
-        FileSection("Image Data", cursor.offset, 0, end - cursor.offset)
-    )
+    sections.append(FileSection("Image Data", cursor.offset, 0, end - cursor.offset))
 
     layers = None
 
     mask_section = next(
-        (
-            item
-            for item in sections
-            if item.name == "Layer and Mask Information"
-        ),
+        (item for item in sections if item.name == "Layer and Mask Information"),
         None,
     )
 
     if mask_section is not None:
-        layers, layer_warnings = _read_layer_and_mask(
-            reader, mask_section, large
-        )
+        layers, layer_warnings = _read_layer_and_mask(reader, mask_section, large)
         warnings.extend(layer_warnings)
 
     return EmbeddedDocument(

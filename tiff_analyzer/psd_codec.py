@@ -11,7 +11,7 @@ shapes:
 
 The predicted variant was verified against data written by Photoshop itself:
 decoding yields exactly ``width x height x bytes_per_sample``, and
-`encode_channel(decode_channel(x)) `odtwarza piksele bit w bit.
+`encode_channel(decode_channel(x))` reproduces the pixels bit for bit.
 
 Pixels are always big-endian, exactly as stored in the PSD/PSB file.
 """
@@ -137,9 +137,7 @@ def _decode_rle(data: bytes, geometry: ChannelGeometry, large: bool) -> bytes:
         row = _unpackbits(chunk)
 
         if len(row) != row_bytes:
-            raise CodecError(
-                f"RLE row data has {len(row)} B, expected {row_bytes}"
-            )
+            raise CodecError(f"RLE row data has {len(row)} B, expected {row_bytes}")
 
         out += row
         cursor += count
@@ -213,11 +211,7 @@ def decode_channel(
         if compression == ZIP:
             return plain
 
-        return (
-            unpredict(_as_rows(plain, geometry))
-            .astype(geometry.dtype)
-            .tobytes()
-        )
+        return unpredict(_as_rows(plain, geometry)).astype(geometry.dtype).tobytes()
 
     raise CodecError(f"unknown compression method: {compression}")
 
@@ -233,7 +227,7 @@ def encode_channel(
     Encodes raw pixels with the chosen method.
 
     Writing RLE is not supported: we shrink files with deflate,
-    a RLE tylko odczytujemy.
+    while RLE is only ever read.
 
     >>> shape = ChannelGeometry(3, 1, 2)
     >>> pixels = bytes([0, 10, 0, 12, 0, 11])
@@ -260,7 +254,7 @@ def encode_channel(
     raise CodecError(f"unknown compression method: {compression}")
 
 
-def recompress_channel(  # noqa: PLR0913  - kodek: source, target i geometria
+def recompress_channel(  # noqa: PLR0913  - a codec needs source, target and geometry
     data: bytes,
     *,
     source: int,
@@ -285,12 +279,8 @@ def recompress_channel(  # noqa: PLR0913  - kodek: source, target i geometria
     >>> decode_channel(packed, compression=3, geometry=shape) == pixels
     True
     """
-    plain = decode_channel(
-        data, compression=source, geometry=geometry, large=large
-    )
+    plain = decode_channel(data, compression=source, geometry=geometry, large=large)
 
-    encoded = encode_channel(
-        plain, compression=target, geometry=geometry, level=level
-    )
+    encoded = encode_channel(plain, compression=target, geometry=geometry, level=level)
 
     return encoded, plain

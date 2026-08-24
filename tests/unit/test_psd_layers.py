@@ -28,14 +28,14 @@ def section_divider(kind: int) -> bytes:
 
 def test_reads_single_layer():
     # Arrange
-    data = layer_section(layer_record(name="Tlo", bounds=(0, 0, 100, 200)))
+    data = layer_section(layer_record(name="Background", bounds=(0, 0, 100, 200)))
 
     # Act
     stack = parse(data)
 
     # Assert
     assert len(stack.layers) == 1
-    assert stack.layers[0].name == "Tlo"
+    assert stack.layers[0].name == "Background"
     assert stack.layers[0].width == 200
     assert stack.layers[0].height == 100
     assert stack.is_exact
@@ -94,9 +94,10 @@ def test_negative_count_means_transparency():
 
 def test_channel_sizes_are_summed():
     # Arrange
-    data = layer_section(
-        layer_record(channels=((0, 100), (1, 200), (2, 300)))
-    ) + b"\x00" * 600
+    data = (
+        layer_section(layer_record(channels=((0, 100), (1, 200), (2, 300))))
+        + b"\x00" * 600
+    )
 
     # Act
     stack = parse(data)
@@ -149,7 +150,7 @@ def test_opacity_percent(opacity, percent):
 def test_hidden_flag():
     # Arrange
     data = layer_section(
-        layer_record(name="widoczna", flags=0),
+        layer_record(name="visible", flags=0),
         layer_record(name="ukryta", flags=0x02),
     )
 
@@ -179,9 +180,7 @@ def test_empty_bounds_layer():
 
 def test_extra_keys_are_listed():
     # Arrange
-    data = layer_section(
-        layer_record(extras=layer_extra_block("lclr", b"\x00" * 8))
-    )
+    data = layer_section(layer_record(extras=layer_extra_block("lclr", b"\x00" * 8)))
 
     # Act
     keys = parse(data).layers[0].extra_keys
@@ -198,9 +197,7 @@ def test_extra_keys_are_listed():
 
 def channel_data(*codes: int, payload: int = 8) -> bytes:
     """Channel data: a 2-byte compression code plus filler."""
-    return b"".join(
-        code.to_bytes(2, "little") + b"\x00" * payload for code in codes
-    )
+    return b"".join(code.to_bytes(2, "little") + b"\x00" * payload for code in codes)
 
 
 def test_channel_compression_is_read():
@@ -238,9 +235,7 @@ def test_compression_names(code, expected):
 
 def test_mixed_compression_is_reported():
     # Arrange
-    data = layer_section(
-        layer_record(channels=((0, 10), (1, 10)))
-    ) + channel_data(0, 3)
+    data = layer_section(layer_record(channels=((0, 10), (1, 10)))) + channel_data(0, 3)
 
     # Act
     layer = parse(data).layers[0]
@@ -251,10 +246,14 @@ def test_mixed_compression_is_reported():
 
 def test_compression_offsets_follow_channel_sizes():
     # Arrange - the second layer must land on ITS OWN data, not somebody else's
-    data = layer_section(
-        layer_record(name="a", channels=((0, 10),)),
-        layer_record(name="b", channels=((0, 10),)),
-    ) + channel_data(1) + channel_data(3)
+    data = (
+        layer_section(
+            layer_record(name="a", channels=((0, 10),)),
+            layer_record(name="b", channels=((0, 10),)),
+        )
+        + channel_data(1)
+        + channel_data(3)
+    )
 
     # Act
     layers = parse(data).layers
@@ -292,12 +291,7 @@ def test_pixel_bytes_excludes_compression_header():
 
 def test_compression_is_read_big_endian_too():
     # Arrange - a raw PSD/PSB: the compression code is big-endian too
-    data = (
-        (1).to_bytes(2, "big")
-        + _be_record()
-        + (3).to_bytes(2, "big")
-        + b"\x00" * 8
-    )
+    data = (1).to_bytes(2, "big") + _be_record() + (3).to_bytes(2, "big") + b"\x00" * 8
 
     # Act
     stack = parse_layers(BytesReader(data), 0, len(data), byte_order=">")
@@ -332,7 +326,7 @@ def _be_record() -> bytes:
 def test_group_nesting_depth():
     # Arrange - storage runs bottom-up: group end, contents, group header
     data = layer_section(
-        layer_record(name="Tlo"),
+        layer_record(name="Background"),
         layer_record(name="</Layer group>", extras=section_divider(3)),
         layer_record(name="W grupie"),
         layer_record(name="Grupa", extras=section_divider(1)),
@@ -373,7 +367,7 @@ def test_nested_groups_pair_correctly():
     data = layer_section(
         layer_record(name="</Layer group>", extras=section_divider(3)),
         layer_record(name="</Layer group>", extras=section_divider(3)),
-        layer_record(name="Glebiej"),
+        layer_record(name="Deeper"),
         layer_record(name="Wewnetrzna", extras=section_divider(1)),
         layer_record(name="Zewnetrzna", extras=section_divider(1)),
     )
@@ -385,7 +379,7 @@ def test_nested_groups_pair_correctly():
     assert [layer.name for layer in layers] == [
         "Zewnetrzna",
         "Wewnetrzna",
-        "Glebiej",
+        "Deeper",
         "Wewnetrzna",
         "Zewnetrzna",
     ]
@@ -394,9 +388,7 @@ def test_nested_groups_pair_correctly():
 
 def test_unmatched_group_end_keeps_literal_name():
     # Arrange - a group end with no header
-    data = layer_section(
-        layer_record(name="</Layer group>", extras=section_divider(3))
-    )
+    data = layer_section(layer_record(name="</Layer group>", extras=section_divider(3)))
 
     # Act
     layers = parse(data).layers
@@ -478,10 +470,13 @@ def test_zero_layers():
 
 def test_by_size_orders_descending():
     # Arrange
-    data = layer_section(
-        layer_record(name="mala", channels=((0, 10),)),
-        layer_record(name="duza", channels=((0, 900),)),
-    ) + b"\x00" * 910
+    data = (
+        layer_section(
+            layer_record(name="mala", channels=((0, 10),)),
+            layer_record(name="duza", channels=((0, 900),)),
+        )
+        + b"\x00" * 910
+    )
 
     # Act
     ordered = parse(data).by_size()
@@ -496,4 +491,8 @@ def test_layer_is_frozen():
 
     # Assert
     with pytest.raises(AttributeError):
-        layer.name = "inna"
+        # The assignment is the subject of the test, so the type checker is
+        # right to object and has to be told to stand down here. Writing it
+        # as `setattr` instead only moves the argument to ruff, which rewrites
+        # a constant `setattr` back into this line.
+        layer.name = "other"  # pyrefly: ignore[read-only]

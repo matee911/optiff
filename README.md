@@ -38,6 +38,13 @@ python -m tiff_analyzer FILE.tif --optimize RESULT.tif # compress the layers
 | `tools/verify_in_photoshop.jsx` | checks a whole batch of source/result pairs |
 | `tools/affinity_bisect.py` | builds variants of one file at chosen tag sizes |
 
+## Development
+
+```bash
+pre-commit install    # ruff format, ruff check, pyrefly on every commit
+pre-commit run --all-files
+```
+
 ## Tests
 
 ```bash
@@ -45,9 +52,35 @@ pytest                            # no sample files needed, ~2 s
 pytest -m slow --tiff-dir /path   # against real files
 ```
 
-Tests that need specific files read their mapping from
-`tests/samples.local.json` (template: `tests/samples.example.json`). That file
-is git-ignored so private file names never reach the repository.
+The suite needs no sample files: it generates them. Every case we have met in
+a real file has a recipe in `tests/sample_files.py` and reaches tests through
+the `sample_file` fixture, which writes into pytest's `tmp_path` - nothing is
+kept in the repository.
+
+| case | what it reproduces |
+|---|---|
+| `raw-layers` | layers stored uncompressed - the ordinary win |
+| `rle-layers` | layers as RLE, Photoshop's own default, deliberately left alone |
+| `packed-layers` | already ZIP with prediction: nothing left to gain |
+| `mixed-layers` | one channel packed, the rest raw - a half-processed file |
+| `adjustment-mask` | a 0x0 rectangle with the bytes in the mask; needs `--zip-fallback` |
+| `grouped-layers` | layers nested in a group (`lsct` dividers) |
+| `large-document-container` | the `V0002` container with 8-byte lengths |
+| `smart-object` | a whole PSB embedded in an `lnk2` record |
+| `compressible-image` | flattened image stored raw, so `--image-data` has work |
+| `compressed-image` | flattened image already deflated - a note, not a failure |
+| `photoshop-not-last` | tag 37724 before the image data, so the file is refused |
+| `no-photoshop` | a plain TIFF with no Photoshop block |
+
+To open them in Photoshop or Affinity:
+
+```bash
+python -m tests.sample_files /some/directory
+```
+
+Tests that need real files read their mapping from `tests/samples.local.json`
+(template: `tests/samples.example.json`). That file is git-ignored so private
+file names never reach the repository.
 
 ## Documentation
 

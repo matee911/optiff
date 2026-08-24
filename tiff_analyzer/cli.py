@@ -17,7 +17,7 @@ from tiff_analyzer.units import format_size
 
 try:
     __version__ = version("tiff-analyzer")
-except PackageNotFoundError:  # pragma: no cover - uruchomienie bez instalacji
+except PackageNotFoundError:  # pragma: no cover - running from a source tree
     __version__ = "0.1.0+dev"
 
 EXIT_OK = 0
@@ -92,21 +92,13 @@ def print_optimize(result: OptimizeResult) -> int:
     )
 
     print()
-    print(
-        f"{'':<16} {'BEFORE':>17} {'AFTER':>17} {'SAVED':>17}  SHARE"
-    )
+    print(f"{'':<16} {'BEFORE':>17} {'AFTER':>17} {'SAVED':>17}  SHARE")
     print("-" * WIDTH)
 
     for label, before, after in rows:
         share = f"{after / before * 100:5.1f}%" if before else "     -"
 
-        print(
-            f"{label:<16} "
-            f"{before:>17,} "
-            f"{after:>17,} "
-            f"{before - after:>17,} "
-            f"{share}"
-        )
+        print(f"{label:<16} {before:>17,} {after:>17,} {before - after:>17,} {share}")
 
     print("-" * WIDTH)
     print(
@@ -123,12 +115,8 @@ def print_optimize(result: OptimizeResult) -> int:
         print("All of the saving comes from channel data.")
 
     print("Differences between levels:")
-    print(
-        f"  {result.padding_saved:+,} B  block padding to 4 bytes"
-    )
-    print(
-        f"  {result.tail_saved:+,} B  padding dropped at the end of the file"
-    )
+    print(f"  {result.padding_saved:+,} B  block padding to 4 bytes")
+    print(f"  {result.tail_saved:+,} B  padding dropped at the end of the file")
     print()
 
     print(
@@ -173,11 +161,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--optimize",
-        metavar="PLIK",
+        metavar="FILE",
         type=Path,
         help=(
-            "write an optimized copy to the given path; "
-            "the original is left untouched"
+            "write an optimized copy to the given path; the original is left untouched"
         ),
     )
 

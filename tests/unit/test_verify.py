@@ -7,7 +7,7 @@ from tiff_analyzer.verify import ChannelDigest, compare
 
 def digest(
     where: str = "tiff",
-    layer: str = "0:Tlo",
+    layer: str = "0:Background",
     channel: str = "0:R",
     value: str = "aaa",
     source: str = "pixels",

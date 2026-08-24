@@ -1,5 +1,5 @@
 """
-Testy rekompresji sekcji warstw.
+Tests for recompressing the layer section.
 
 The point: after a rebuild the section must parse and yield the same pixels.
 """
@@ -39,7 +39,7 @@ def raw_channel(data: bytes) -> bytes:
     return RAW.to_bytes(HEADER, "little") + data
 
 
-def build_section(*channel_data: bytes, name: str = "Tlo") -> bytes:
+def build_section(*channel_data: bytes, name: str = "Background") -> bytes:
     """A section with one layer and the given RAW channels."""
     channels = tuple(
         (index, len(data) + HEADER) for index, data in enumerate(channel_data)
@@ -94,9 +94,9 @@ def test_pixels_survive_round_trip():
     reader = BytesReader(rebuilt)
     geometry = ChannelGeometry(WIDTH, ROWS, 2)
 
-    for channel, original in zip(
-        stack.layers[0].channels, originals, strict=True
-    ):
+    for channel, original in zip(stack.layers[0].channels, originals, strict=True):
+        assert channel.compression is not None
+
         plain = decode_channel(
             reader.read_at(channel.data_offset + HEADER, channel.pixel_bytes),
             compression=channel.compression,
@@ -183,9 +183,7 @@ def test_already_predicted_channel_is_not_touched():
     # Act - a second pass over already compressed material
     reader = BytesReader(once)
     stack = parse_layers(reader, 0, len(once))
-    plan_two = plan_layer_section(
-        reader, stack, 0, len(once), bpp=2, byte_order="<"
-    )
+    plan_two = plan_layer_section(reader, stack, 0, len(once), bpp=2, byte_order="<")
 
     # Assert
     assert plan_one.changed is True
@@ -195,7 +193,7 @@ def test_already_predicted_channel_is_not_touched():
 def test_empty_channel_is_copied_verbatim():
     # Arrange - a channel with no data has not even a compression header
     source = layer_section(
-        layer_record(name="pusta", bounds=(0, 0, 0, 0), channels=((0, 0),))
+        layer_record(name="empty", bounds=(0, 0, 0, 0), channels=((0, 0),))
     )
 
     # Act
@@ -244,7 +242,7 @@ def test_sources_filter_is_respected():
 
 
 # ============================================================================
-# RAPORTOWANIE
+# REPORTING
 # ============================================================================
 
 
@@ -322,6 +320,9 @@ def test_works_in_both_byte_orders(byte_order):
 
     # Assert
     channel = again.layers[0].channels[0]
+
+    assert channel.compression is not None
+
     plain = decode_channel(
         BytesReader(rebuilt).read_at(channel.data_offset + HEADER, channel.pixel_bytes),
         compression=channel.compression,

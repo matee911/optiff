@@ -5,18 +5,18 @@ A change in channel size has to propagate through seven nested length
 fields::
 
     channel -> layer section -> Lr16 block -> Layer and Mask -> PSB file
-          -> rekord lnk2 -> blok lnk2 -> kontener 37724
+          -> lnk2 record -> lnk2 block -> container 37724
 
 Each level rewrites only its own length field; the remaining bytes are
 copied from the source. The functions return `(segments, new_size)`, so
-size rodzica wychodzi z sumowania, a nie ze zgadywania.
+the parent size comes out of a sum rather than out of a guess.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from tiff_analyzer.domain import PhotoshopAnalysis, PhotoshopBlock
+from tiff_analyzer.domain import ByteOrder, PhotoshopAnalysis, PhotoshopBlock
 from tiff_analyzer.optimize_layers import (
     DEFAULT_SOURCES,
     ChannelResult,
@@ -39,7 +39,7 @@ class ContainerPlan:
 
     segments: list[Segment] = field(default_factory=list)
     results: list[ChannelResult] = field(default_factory=list)
-    #: Rozmiar kontenera po przebudowie.
+    #: Container size after the rebuild.
     size: int = 0
     #: Container size in the source, for the "before / after" summary.
     source_size: int = 0
@@ -93,12 +93,12 @@ def _block(
     return segments, block.header_size + align4(payload_size)
 
 
-def _plan_layers_block(  # noqa: PLR0913  - geometria, wariant i strojenie
+def _plan_layers_block(  # noqa: PLR0913  - geometry, variant and tuning
     reader: ByteReader,
     block: PhotoshopBlock,
     *,
     bpp: int,
-    byte_order: str,
+    byte_order: ByteOrder,
     large: bool,
     level: int,
     sources: tuple[int, ...],
@@ -159,20 +159,19 @@ def _plan_embedded(  # noqa: PLR0913  - zakres, strojenie i wybor methods
 
     # 16/32-bit layers live in the additional Lr16 block, not in Layer Info.
     inner_start = section.data_offset
-    layer_info_size = int.from_bytes(
-        reader.read_at(inner_start, length_size), "big"
-    )
+    layer_info_size = int.from_bytes(reader.read_at(inner_start, length_size), "big")
 
     if layer_info_size > 0:
         return [Copy(start, size)], size, []
 
-    blocks_start = inner_start + length_size + 4 + int.from_bytes(
-        reader.read_at(inner_start + length_size, 4), "big"
+    blocks_start = (
+        inner_start
+        + length_size
+        + 4
+        + int.from_bytes(reader.read_at(inner_start + length_size, 4), "big")
     )
 
-    blocks, _warnings = walk(
-        reader, blocks_start, section.end, large_document=large
-    )
+    blocks, _warnings = walk(reader, blocks_start, section.end, large_document=large)
 
     layer_block = next(
         (item for item in blocks if item.key in LAYER_SECTION_KEYS), None
@@ -196,7 +195,8 @@ def _plan_embedded(  # noqa: PLR0913  - zakres, strojenie i wybor methods
     if not layer_plan.changed:
         return [Copy(start, size)], size, layer_plan.results
 
-    # Sekcja Layer and Mask: wszystko do bloku warstw, new blok, reszta.
+    # Layer and Mask section: everything up to the layer block, the new
+    # block, then the rest.
     tail_start = layer_block.offset + layer_block.padded_size
 
     inner: list[Segment] = [
@@ -226,7 +226,7 @@ def _plan_links_block(  # noqa: PLR0913  - zakres, strojenie i wybor methods
     target: int,
     blind: bool = False,
 ) -> tuple[list[Segment], int, list[ChannelResult]]:
-    """Blok lnk2 z przebudowanymi osadzonymi plikami."""
+    """The lnk2 block with its embedded files rebuilt."""
     start = block.payload_offset
     end = start + block.size
 
@@ -268,17 +268,15 @@ def _plan_links_block(  # noqa: PLR0913  - zakres, strojenie i wybor methods
         # the new record length
         payload.append(Literal(record_size.to_bytes(8, "little")))
         # the record header up to the file size field
-        payload.append(
-            Copy(item.offset + 8, item.size_offset - (item.offset + 8))
-        )
+        payload.append(Copy(item.offset + 8, item.size_offset - (item.offset + 8)))
         payload.append(Literal(new_size.to_bytes(8, "little")))
-        # flaga i deskryptor otwarcia bez zmian
+        # the flag and the opening descriptor stay as they are
         payload.append(
             Copy(item.size_offset + 8, item.data_offset - (item.size_offset + 8))
         )
         payload.extend(rebuilt)
 
-        # Pola za danymi pliku: identyfikator, elapsed modyfikacji, blokada.
+        # Fields behind the file data: identifier, modification time, lock.
         if item.tail_size:
             payload.append(Copy(item.data_end, item.tail_size))
 

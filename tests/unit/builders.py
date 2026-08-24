@@ -1,8 +1,8 @@
 """
 Building synthetic Photoshop block streams.
 
-Ten sam builder zasila testy jednostkowe parsera i fixture'y integracyjne,
-so the synthetic TIFF runs it through the real tifffile writer.
+The same builder feeds the parser unit tests and the integration
+fixtures, so the synthetic TIFF runs it through the real tifffile writer.
 """
 
 from __future__ import annotations
@@ -11,6 +11,10 @@ CONTAINER_SIGNATURE = b"Adobe Photoshop Document Data Block"
 
 #: The container header including its NUL terminator: 36 bytes.
 CONTAINER_HEADER = CONTAINER_SIGNATURE + b"\x00"
+
+#: The variant newer Photoshop versions write, in which selected keys
+#: carry an 8-byte length.
+CONTAINER_V0002 = b"Adobe Photoshop Document Data V0002\x00"
 
 
 def _swap(value: bytes, byte_order: str) -> bytes:
@@ -66,16 +70,28 @@ def psd_stream(
     *blocks: tuple[str, bytes],
     byte_order: str = "<",
     signature: str = "8BIM",
+    large_length_keys: frozenset[str] = frozenset(),
 ) -> bytes:
     """
     A run of blocks with no container header.
 
+    `large_length_keys` reproduces the PSB rule: inside a "V0002" container
+    those keys carry an 8-byte length even though the signature stays "8BIM".
+
     >>> stream = psd_stream(("Lr16", b"ab"), ("Pat2", b""))
-    >>> len(stream)                       # 12+2+2 (padding) oraz 12+0+0
+    >>> len(stream)                       # 12+2+2 (padding) and 12+0+0
     28
+    >>> len(psd_stream(("Lr16", b"ab"), large_length_keys=frozenset({"Lr16"})))
+    20
     """
     return b"".join(
-        psd_block(key, payload, byte_order=byte_order, signature=signature)
+        psd_block(
+            key,
+            payload,
+            byte_order=byte_order,
+            signature=signature,
+            length_size=8 if key in large_length_keys else None,
+        )
         for key, payload in blocks
     )
 
@@ -94,10 +110,8 @@ def layer_extra_block(key: str, payload: bytes) -> bytes:
 
 
 def unicode_name(name: str) -> bytes:
-    """Payload bloku `luni`: liczba jednostek UTF-16 plus terminator."""
-    return (len(name) + 1).to_bytes(4, "little") + (name + "\x00").encode(
-        "utf-16-le"
-    )
+    """The `luni` block payload: the UTF-16 unit count plus a terminator."""
+    return (len(name) + 1).to_bytes(4, "little") + (name + "\x00").encode("utf-16-le")
 
 
 def pascal_name(name: str) -> bytes:
@@ -115,9 +129,9 @@ def pascal_name(name: str) -> bytes:
     return raw + b"\x00" * ((-len(raw)) % 4)
 
 
-def layer_record(  # noqa: PLR0913  - builder testowy, wariant per parametr
+def layer_record(  # noqa: PLR0913  - a test builder, one knob per variant
     *,
-    name: str = "Warstwa",
+    name: str = "Layer",
     bounds: tuple[int, int, int, int] = (0, 0, 10, 20),
     channels: tuple[tuple[int, int], ...] = ((0, 0),),
     blend: str = "norm",
@@ -125,8 +139,16 @@ def layer_record(  # noqa: PLR0913  - builder testowy, wariant per parametr
     flags: int = 0,
     extras: bytes = b"",
     unicode: bool = True,
+    large: bool = False,
 ) -> bytes:
-    """Pojedynczy rekord warstwy w postaci byte-swapped."""
+    """
+    A single layer record in byte-swapped form.
+
+    `large` picks the width of a channel size field: 8 bytes inside a "V0002"
+    container, 4 bytes inside the classic one. Getting it wrong does not fail
+    loudly - the record just parses into nonsense - so it has to follow
+    whichever container the record is going into.
+    """
     top, left, bottom, right = bounds
 
     blocks = extras
@@ -135,19 +157,21 @@ def layer_record(  # noqa: PLR0913  - builder testowy, wariant per parametr
         blocks += layer_extra_block("luni", unicode_name(name))
 
     extra = (
-        (0).to_bytes(4, "little")  # brak masks warstwy
+        (0).to_bytes(4, "little")  # no layer mask
         + (0).to_bytes(4, "little")  # no blending ranges
         + pascal_name(name)
         + blocks
     )
 
     return (
-        b"".join(value.to_bytes(4, "little", signed=True)
-                 for value in (top, left, bottom, right))
+        b"".join(
+            value.to_bytes(4, "little", signed=True)
+            for value in (top, left, bottom, right)
+        )
         + len(channels).to_bytes(2, "little")
         + b"".join(
             channel_id.to_bytes(2, "little", signed=True)
-            + size.to_bytes(4, "little")
+            + size.to_bytes(8 if large else 4, "little")
             for channel_id, size in channels
         )
         + b"8BIM"[::-1]
@@ -170,6 +194,7 @@ def psd_container(
     byte_order: str = "<",
     signature: str = "8BIM",
     header: bytes = CONTAINER_HEADER,
+    large_length_keys: frozenset[str] = frozenset(),
 ) -> bytes:
     """
     The full content of tag 37724: container header plus blocks.
@@ -180,11 +205,16 @@ def psd_container(
     >>> len(blob) - len(CONTAINER_HEADER)
     16
     """
-    return header + psd_stream(*blocks, byte_order=byte_order, signature=signature)
+    return header + psd_stream(
+        *blocks,
+        byte_order=byte_order,
+        signature=signature,
+        large_length_keys=large_length_keys,
+    )
 
 
 # ============================================================================
-# MINIMALNY TIFF
+# A MINIMAL TIFF
 # ============================================================================
 
 #: An IFD entry: code(2) + type(2) + count(4) + value-or-offset(4).
@@ -202,16 +232,17 @@ def _entry(code: int, dtype: int, count: int, value: int) -> bytes:
     )
 
 
-def build_tiff(
+def build_tiff(  # noqa: PLR0913  - a test builder, one knob per variant
     photoshop: bytes,
     *,
     width: int = 8,
     height: int = 4,
     photoshop_last: bool = True,
     image: bytes | None = None,
+    compression: int = 1,
 ) -> bytes:
     """
-    Klasyczny little-endian TIFF z tagiem 37724.
+    A classic little-endian TIFF carrying tag 37724.
 
     We choose the layout ourselves, because it decides whether the optimizer
     can shorten the file without moving offsets. `photoshop_last=False`
@@ -227,7 +258,10 @@ def build_tiff(
     if image is None:
         image = bytes(expected)
 
-    if len(image) != expected:
+    # With compression 1 the strip holds pixels, so its length is fixed. With
+    # anything else it holds an already-encoded payload of any length, and the
+    # caller is the one who knows what it decodes to.
+    if compression == 1 and len(image) != expected:
         raise ValueError(f"the image has {len(image)} B, expected {expected}")
 
     codes = [256, 257, 258, 259, 262, 273, 277, 278, 279, 37724]
@@ -251,7 +285,7 @@ def build_tiff(
             _entry(256, SHORT, 1, width),
             _entry(257, SHORT, 1, height),
             _entry(258, SHORT, samples, bits_at),
-            _entry(259, SHORT, 1, 1),  # bez kompresji
+            _entry(259, SHORT, 1, compression),
             _entry(262, SHORT, 1, 2),  # RGB
             _entry(273, LONG, 1, image_at),
             _entry(277, SHORT, 1, samples),
@@ -269,19 +303,17 @@ def build_tiff(
 
     tail = image + photoshop if photoshop_last else photoshop + image
 
-    header = (
-        b"II" + (42).to_bytes(2, "little") + ifd_at.to_bytes(4, "little")
-    )
+    header = b"II" + (42).to_bytes(2, "little") + ifd_at.to_bytes(4, "little")
 
     return header + ifd + body + tail
 
 
 def psb_file(layers: bytes, *, width: int = 8, height: int = 4) -> bytes:
     """
-    Minimalny file PSB (big-endian) z warstwami w bloku dodatkowym Lr16.
+    A minimal PSB file (big-endian) with its layers in the extra Lr16 block.
 
-    Tak wlasnie Photoshop zapisuje dokumenty 16-bitowe: klasyczna sekcja
-    Layer Info ma dlugosc 0, a warstwy siedza w Lr16.
+    That is exactly how Photoshop writes 16-bit documents: the classic Layer
+    Info section has length 0, and the layers live in Lr16.
     """
     block_payload = layers + b"\x00" * ((-len(layers)) % 4)
     block = b"8BIM" + b"Lr16" + len(layers).to_bytes(8, "big") + block_payload
@@ -309,22 +341,19 @@ def psb_file(layers: bytes, *, width: int = 8, height: int = 4) -> bytes:
     )
 
 
-#: Pola zapisywane ZA danymi pliku w rekordzie lnk2 (wersje 5-7).
-LINK_RECORD_TAIL = (
-    (1).to_bytes(4, "little") + b"\x00\x00"
-    + b"\x00" * 8
-    + b"\x00"
-)
+#: Fields written BEHIND the file data in an lnk2 record (versions 5-7).
+LINK_RECORD_TAIL = (1).to_bytes(4, "little") + b"\x00\x00" + b"\x00" * 8 + b"\x00"
 
 
 def link_record_with_psb(layers: bytes, *, name: str = "smart.psb") -> bytes:
-    """Rekord lnk2 z osadzonym PSB i kompletnym ogonem."""
+    """An lnk2 record with an embedded PSB and a complete tail."""
     data = psb_file(layers)
 
     body = (
         b"liFD"[::-1]
         + (7).to_bytes(4, "little")
-        + bytes([3]) + b"abc"
+        + bytes([3])
+        + b"abc"
         + (len(name) + 1).to_bytes(4, "little")
         + (name + "\x00").encode("utf-16-le")
         + b"8BPB"[::-1]
@@ -340,13 +369,13 @@ def link_record_with_psb(layers: bytes, *, name: str = "smart.psb") -> bytes:
 
 def layer_record_be(
     *,
-    name: str = "Tlo",
+    name: str = "Background",
     bounds: tuple[int, int, int, int] = (0, 0, 10, 20),
     channels: tuple[tuple[int, int], ...] = ((0, 0),),
 ) -> bytes:
     """
-    Rekord warstwy w surowym pliku PSB: big-endian, kody nieodwrocone,
-    8-bajtowe sizes channels.
+    A layer record in a raw PSB file: big-endian, codes the right way
+    round, 8-byte channel sizes.
     """
     top, left, bottom, right = bounds
 
@@ -356,8 +385,7 @@ def layer_record_be(
     extra = (0).to_bytes(4, "big") + (0).to_bytes(4, "big") + pascal
 
     return (
-        b"".join(v.to_bytes(4, "big", signed=True)
-                 for v in (top, left, bottom, right))
+        b"".join(v.to_bytes(4, "big", signed=True) for v in (top, left, bottom, right))
         + len(channels).to_bytes(2, "big")
         + b"".join(
             cid.to_bytes(2, "big", signed=True) + size.to_bytes(8, "big")
@@ -372,7 +400,7 @@ def layer_record_be(
 
 
 def layer_section_be(*records: bytes, count: int | None = None) -> bytes:
-    """Sekcja warstw surowego PSB."""
+    """The layer section of a raw PSB."""
     declared = len(records) if count is None else count
 
     return declared.to_bytes(2, "big", signed=True) + b"".join(records)

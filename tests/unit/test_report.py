@@ -59,9 +59,7 @@ def test_no_sibling_appears_after_last_node():
     last_index = max(
         index for index, line in enumerate(lines) if line.startswith("└──")
     )
-    assert not any(
-        line.startswith("├──") for line in lines[last_index + 1 :]
-    )
+    assert not any(line.startswith("├──") for line in lines[last_index + 1 :])
 
 
 def test_children_follow_their_parent():
@@ -83,7 +81,7 @@ def test_children_follow_their_parent():
 
 
 def test_last_child_of_a_node_uses_last_glyph():
-    # Arrange - IMAGE DATA ma kilkoro dzieci
+    # Arrange - IMAGE DATA has several children
     blocks = [block("IMAGE DATA", 90), block("XMP", 10, 700)]
 
     # Act
@@ -107,9 +105,7 @@ def test_image_data_children_come_before_next_sibling():
     lines = render_size_tree(blocks, 100, IMAGE_INFO)
 
     # Assert
-    xmp_index = next(
-        index for index, line in enumerate(lines) if "XMP" in line
-    )
+    xmp_index = next(index for index, line in enumerate(lines) if "XMP" in line)
     before = lines[2:xmp_index]
     assert before, "IMAGE DATA must have children before the next node"
     assert all(line.startswith("│   ") for line in before)
@@ -133,8 +129,7 @@ def test_percentages_never_exceed_one_hundred():
 
     # Assert
     percentages = [
-        float(line.rsplit(" ", 1)[-1].rstrip("%"))
-        for line in top_level(lines)
+        float(line.rsplit(" ", 1)[-1].rstrip("%")) for line in top_level(lines)
     ]
     assert sum(percentages) == pytest.approx(100.0)
 

@@ -16,7 +16,7 @@ def analyzer() -> ImageSourceDataAnalyzer:
 
 
 # ============================================================================
-# KONTENER
+# CONTAINER
 # ============================================================================
 
 
@@ -41,7 +41,7 @@ def test_unknown_container_signature_is_reported(analyzer):
 
 
 def test_missing_nul_terminator_is_reported(analyzer):
-    # Arrange - poprawna sygnatura, ale zamiast NUL od razu blok
+    # Arrange - a valid signature, but a block instead of the NUL
     data = CONTAINER_SIGNATURE + b"MIB8" + b"61rL" + bytes(4)
 
     # Act
@@ -49,16 +49,14 @@ def test_missing_nul_terminator_is_reported(analyzer):
 
     # Assert
     assert result.found is True
-    assert [warning.code for warning in result.warnings] == [
-        "unterminated-signature"
-    ]
+    assert [warning.code for warning in result.warnings] == ["unterminated-signature"]
 
 
 @pytest.mark.parametrize("byte_order", ["<", ">"])
 def test_analyze_returns_logical_keys(analyzer, byte_order):
     # Arrange
     data = psd_container(
-        ("Lr16", b"warstwy"),
+        ("Lr16", b"layers"),
         ("Pat2", b""),
         ("cinf", b"x"),
         byte_order=byte_order,

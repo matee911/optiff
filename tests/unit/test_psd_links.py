@@ -9,22 +9,22 @@ from tiff_analyzer.readers import BytesReader
 
 
 def unicode_string(value: str) -> bytes:
-    return (len(value) + 1).to_bytes(4, "little") + (value + "\x00").encode(
-        "utf-16-le"
-    )
+    return (len(value) + 1).to_bytes(4, "little") + (value + "\x00").encode("utf-16-le")
 
 
 def open_descriptor() -> bytes:
-    """Minimalny deskryptor otwarcia: wersja 16 plus empty deskryptor."""
+    """A minimal opening descriptor: version 16 plus an empty descriptor."""
     return (
-        (16).to_bytes(4, "little")  # wersja
-        + (1).to_bytes(4, "little") + b"\x00\x00"  # pusta name Unicode
-        + (0).to_bytes(4, "little") + b"llun"  # classID "null"
+        (16).to_bytes(4, "little")  # version
+        + (1).to_bytes(4, "little")
+        + b"\x00\x00"  # empty Unicode name
+        + (0).to_bytes(4, "little")
+        + b"llun"  # classID "null"
         + (0).to_bytes(4, "little")  # no fields
     )
 
 
-def link_record(  # noqa: PLR0913  - builder testowy, wariant per parametr
+def link_record(  # noqa: PLR0913  - a test builder, one knob per variant
     *,
     name: str = "smart.psb",
     kind: str = "liFD",
@@ -58,7 +58,7 @@ def link_record(  # noqa: PLR0913  - builder testowy, wariant per parametr
 
 
 # ============================================================================
-# ODCZYT
+# READING
 # ============================================================================
 
 
@@ -108,7 +108,7 @@ def test_embedded_bytes_sums_only_embedded():
 
 def test_payload_is_skipped_by_record_length():
     # Arrange - file data inside the record must not derail the parser
-    data = link_record(name="a.psb", size=64, payload=b"\xAB" * 64) + link_record(
+    data = link_record(name="a.psb", size=64, payload=b"\xab" * 64) + link_record(
         name="b.psb", size=1
     )
 
@@ -143,9 +143,7 @@ def test_kind_names(kind, expected):
     data = link_record(kind=kind)
 
     # Assert
-    assert parse_links(BytesReader(data), 0, len(data)).files[0].kind_name == (
-        expected
-    )
+    assert parse_links(BytesReader(data), 0, len(data)).files[0].kind_name == (expected)
 
 
 @pytest.mark.parametrize(
@@ -157,9 +155,9 @@ def test_file_type_names(code, expected):
     data = link_record(file_type=code)
 
     # Assert
-    assert parse_links(BytesReader(data), 0, len(data)).files[
-        0
-    ].file_type_name == expected
+    assert (
+        parse_links(BytesReader(data), 0, len(data)).files[0].file_type_name == expected
+    )
 
 
 def test_descriptor_flag_is_read():
@@ -207,7 +205,7 @@ def test_broken_descriptor_is_reported():
     # Assert
     assert result.files == ()
     assert result.warnings[0].code == "link-record-failed"
-    assert "deskryptor" in result.warnings[0].detail
+    assert "descriptor" in result.warnings[0].detail
 
 
 def test_uid_is_read():
@@ -283,7 +281,7 @@ def test_zero_tail_is_not_a_warning():
 
 def test_nonzero_tail_is_reported():
     # Arrange
-    data = link_record() + b"\xFF" * 40
+    data = link_record() + b"\xff" * 40
 
     # Act
     result = parse_links(BytesReader(data), 0, len(data))
@@ -298,22 +296,23 @@ def test_nonzero_tail_is_reported():
 
 
 # ============================================================================
-# OGON REKORDU
+# THE RECORD TAIL
 # ============================================================================
 
 
 def record_tail() -> bytes:
-    """Pola z wersji 5-7: identyfikator, elapsed modyfikacji, blokada."""
+    """The version 5-7 fields: identifier, modification time, lock."""
     return (
-        (1).to_bytes(4, "little") + b"\x00\x00"   # empty Unicode string
-        + b"\x00" * 8                              # elapsed modyfikacji
-        + b"\x00"                                  # state blokady
+        (1).to_bytes(4, "little")
+        + b"\x00\x00"  # empty Unicode string
+        + b"\x00" * 8  # elapsed modyfikacji
+        + b"\x00"  # lock state
     )
 
 
 def test_tail_after_file_data_is_measured():
-    # Arrange - realne rekordy Photoshopa maja 15 B za danymi pliku
-    data = link_record(size=32, payload=b"\xAB" * 32, tail=record_tail())
+    # Arrange - real Photoshop records carry 15 B behind the file data
+    data = link_record(size=32, payload=b"\xab" * 32, tail=record_tail())
 
     # Act
     item = parse_links(BytesReader(data), 0, len(data)).files[0]

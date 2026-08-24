@@ -130,7 +130,7 @@ class OptimizeResult:
 
 @contextmanager
 def _stopwatch(sink: list[float]):
-    """Mierzy elapsed bloku i dopisuje go do listy."""
+    """Times the block and appends the reading to the list."""
     began = time.monotonic()
 
     try:
@@ -147,7 +147,7 @@ def _tag_is_last(document: TiffDocument, tag) -> bool:
 
 
 def _count_field(tag) -> int:
-    """Pozycja pola `count` we wpisie IFD: kod(2) + typ(2)."""
+    """Where the `count` field sits in an IFD entry: code(2) + type(2)."""
     return tag.offset + 4
 
 
@@ -176,7 +176,7 @@ def plan_file(
     zip_fallback: bool = False,
 ):
     """
-    Zwraca `(segmenty, kontener, plan_obrazu, uwagi)` dla nowego pliku.
+    Returns `(segments, container, image plan, notes)` for the new file.
 
     The segments refer to the whole source file, not to the tag window.
     When `image_data` is on, the pixels are packed with Adobe Deflate and the
@@ -222,19 +222,17 @@ def plan_file(
         try:
             if image_data:
                 try:
-                    image = plan_image_data(
-                        whole, page, order=order, level=level
-                    )
+                    image = plan_image_data(whole, page, order=order, level=level)
                 except ImageDataError as error:
                     # Pixels are a bonus, not a precondition. When there is nothing to
                     # pack there - because Photoshop already did it, or we
                     # did on a previous run - we do the layers only and say
                     # o tym wprost. Przerwanie calej optymalizacji odbieraloby
-                    # zysk z warstw, ktore moga byc jeszcze nietkniete.
+                    # the saving on layers, which may still be untouched.
                     notes.append(f"image pixels skipped - {error}")
 
             if image is None or not image.worth_it:
-                # Ogon pliku podmieniamy, reszta bez zmian.
+                # The tail of the file is replaced, the rest copied.
                 segments: list[Segment] = [
                     Copy(0, count_at),
                     Literal(container.size.to_bytes(4, order)),
@@ -280,7 +278,7 @@ def plan_file(
             whole.close()
 
 
-def optimize(  # noqa: PLR0913  - kazdy przelacznik zmienia zachowanie zapisu
+def optimize(  # noqa: PLR0913  - every switch changes how the write behaves
     path: Path,
     output: Path,
     *,
@@ -356,9 +354,7 @@ def optimize(  # noqa: PLR0913  - kazdy przelacznik zmienia zachowanie zapisu
 
     if written != expected:
         output.unlink(missing_ok=True)
-        raise OptimizeError(
-            f"wrote {written} B, the plan expected {expected} B"
-        )
+        raise OptimizeError(f"wrote {written} B, the plan expected {expected} B")
 
     result.output = output
     result.size_after = written

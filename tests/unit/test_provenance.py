@@ -1,4 +1,4 @@
-"""Testy odczytu pochodzenia (CAI / GenI / cinf)."""
+"""Tests for reading provenance (CAI / GenI / cinf)."""
 
 from __future__ import annotations
 
@@ -20,10 +20,8 @@ def test_missing_block_is_not_found():
 
 
 def test_small_block_is_marker_not_manifest():
-    # Arrange - realny przypadek: 77 B to sam znacznik
-    credentials = ContentCredentials(
-        present=True, enabled=False, block_size=77
-    )
+    # Arrange - a real case: 77 B is the marker on its own
+    credentials = ContentCredentials(present=True, enabled=False, block_size=77)
 
     # Assert
     assert credentials.has_manifest is False

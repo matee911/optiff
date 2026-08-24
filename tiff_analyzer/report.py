@@ -1,6 +1,8 @@
-"""Tekstowy raport z analizy."""
+"""The analysis, rendered as text."""
 
 from __future__ import annotations
+
+import tifffile
 
 from tiff_analyzer.document import TiffDocument
 from tiff_analyzer.domain import DataBlock, ImageInfo, PhotoshopAnalysis
@@ -26,8 +28,7 @@ def render_size_tree(
     The last node at each level gets `└──`, the earlier ones `├──`. A node's
     children follow its own line rather than preceding it; an earlier version
     printed `└── TIFF tag` before further `├──` entries, which produced an
-    inconsistent
-    drzewo.
+    inconsistent tree.
 
     >>> from tiff_analyzer.domain import DataBlock, PhysicalRange
     >>> blocks = [
@@ -61,9 +62,7 @@ def render_size_tree(
             f"{percentage:>6.2f}%"
         )
 
-        lines.extend(
-            f"{indent}{child}" for child in _block_children(block, info)
-        )
+        lines.extend(f"{indent}{child}" for child in _block_children(block, info))
 
     return lines
 
@@ -75,8 +74,7 @@ def _block_children(block: DataBlock, info: ImageInfo | None) -> list[str]:
     if block.name == "IMAGE DATA" and info is not None:
         details.append(f"{info.width} × {info.height}")
         details.append(
-            f"{info.samples} samples × "
-            f"{', '.join(map(str, info.bits_per_sample))}-bit"
+            f"{info.samples} samples × {', '.join(map(str, info.bits_per_sample))}-bit"
         )
         details.append(f"Compression: {info.compression_name}")
         details.append(f"Predictor: {info.predictor or 'None'}")
@@ -97,11 +95,11 @@ def _layer_line(layer: Layer) -> str:
     """
     One layer description line, indented by its nesting inside groups.
 
-    >>> line = _layer_line(Layer(0, "Tlo", 0, 0, 100, 200, (), "mul ", 128, 0, 0))
+    >>> line = _layer_line(Layer(0, "Sky", 0, 0, 100, 200, (), "mul ", 128, 0, 0))
     >>> line.split()
-    ['Tlo', '0.00', 'B', '200x100', '-', 'Multiply', '50%']
+    ['Sky', '0.00', 'B', '200x100', '-', 'Multiply', '50%']
     """
-    name = "  " * layer.depth + (layer.name or "(bez nazwy)")
+    name = "  " * layer.depth + (layer.name or "(unnamed)")
 
     bounds = "-" if layer.is_empty else f"{layer.width}x{layer.height}"
 
@@ -153,9 +151,7 @@ def _compression_summary(stack) -> str:
 
     return ", ".join(
         f"{name} {format_size(size)}"
-        for name, size in sorted(
-            totals.items(), key=lambda item: item[1], reverse=True
-        )
+        for name, size in sorted(totals.items(), key=lambda item: item[1], reverse=True)
     )
 
 
@@ -242,7 +238,7 @@ class Reporter:
         reader = self.document.photoshop_source_reader()
 
         if reader is None:
-            print("Brak tagu 37724.")
+            print("No tag 37724.")
             return
 
         try:
@@ -298,7 +294,7 @@ class Reporter:
         reader = self.document.photoshop_source_reader()
 
         if reader is None:
-            print("Brak tagu 37724.")
+            print("No tag 37724.")
             return
 
         try:
@@ -307,7 +303,7 @@ class Reporter:
             reader.close()
 
         if stack is None:
-            print("Brak sekcji warstw (Lr16 / Lr32 / Layr).")
+            print("No layer section (Lr16 / Lr32 / Layr).")
             return
 
         print(f"Layer count:     {abs(stack.declared_count)}")
@@ -321,17 +317,14 @@ class Reporter:
         if not stack.is_complete:
             print(
                 f"WARNING: records plus channels give {stack.consumed:,} B, "
-                f"sekcja ma {stack.total:,} B"
+                f"the section holds {stack.total:,} B"
             )
 
         for warning in stack.warnings:
             print(f"UWAGA: {warning.code} @0x{warning.offset:X} {warning.detail}")
 
         print()
-        print(
-            f"{'':>3}  {'NAME':<40} {'SIZE':>11}  "
-            f"{'BOUNDS':>12}  {'COMPR':<6} MODE"
-        )
+        print(f"{'':>3}  {'NAME':<40} {'SIZE':>11}  {'BOUNDS':>12}  {'COMPR':<6} MODE")
         print("-" * WIDTH)
 
         for layer in stack.layers:
@@ -417,8 +410,8 @@ class Reporter:
         if stack is None:
             return
 
-        print(f"       warstwy: {len(stack.layers)}")
-        print(f"       kompresja: {_compression_summary(stack)}")
+        print(f"       layers: {len(stack.layers)}")
+        print(f"       compression: {_compression_summary(stack)}")
 
         for warning in stack.warnings:
             print(f"       UWAGA: {warning.code} {warning.detail}")
@@ -468,7 +461,7 @@ class Reporter:
             print(
                 f"{tag.code:7d}  "
                 f"{tag.name:<35} "
-                f"{tag.dtype.name:<10} "
+                f"{tifffile.DATATYPE(tag.dtype).name:<10} "
                 f"count={tag.count:<10} "
                 f"size={format_size(size):>10}"
             )

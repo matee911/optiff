@@ -16,8 +16,16 @@ TEST1_END = 0x5F1E46C
 
 #: Verified layout of the largest production file.
 PROBKA_A_KEYS = [
-    "Lr16", "LMsk", "Pat2", "CAI ", "GenI",
-    "lnk2", "lnkE", "FEid", "FMsk", "cinf",
+    "Lr16",
+    "LMsk",
+    "Pat2",
+    "CAI ",
+    "GenI",
+    "lnk2",
+    "lnkE",
+    "FEid",
+    "FMsk",
+    "cinf",
 ]
 PROBKA_A_END = 0xA66A5240
 
@@ -73,6 +81,8 @@ def test_reader_path_matches_bytes_path(synthetic_psd_tiff: Path):
     with TiffDocument(synthetic_psd_tiff) as document:
         data = document.photoshop_source_data()
 
+        assert data is not None, "the file has no tag 37724"
+
         # Act
         via_reader = TiffPhotoshopAnalyzer(analyzer).analyze(document)
         via_bytes = analyzer.analyze(data)
@@ -82,7 +92,7 @@ def test_reader_path_matches_bytes_path(synthetic_psd_tiff: Path):
 
 
 # ============================================================================
-# REALNE PLIKI
+# REAL FILES
 # ============================================================================
 
 
@@ -122,6 +132,8 @@ def test_test1_layer_payload_is_compressed(sample_tiff: Path):
     with TiffDocument(sample_tiff) as document:
         result = TiffPhotoshopAnalyzer(analyzer).analyze(document)
         reader = document.photoshop_source_reader()
+
+        assert reader is not None, "the file has no tag 37724"
 
         try:
             layers = next(b for b in result.blocks if b.key == "Lr16")
@@ -175,7 +187,15 @@ def test_v0002_container_uses_psb_lengths(sample_named):
     # Assert
     assert result.signature == "Adobe Photoshop Document Data V0002"
     assert [block.key for block in result.blocks] == [
-        "Lr16", "LMsk", "Pat2", "CAI ", "GenI", "lnk2", "lnkE", "FMsk", "cinf",
+        "Lr16",
+        "LMsk",
+        "Pat2",
+        "CAI ",
+        "GenI",
+        "lnk2",
+        "lnkE",
+        "FMsk",
+        "cinf",
     ]
 
     by_key = {block.key: block for block in result.blocks}

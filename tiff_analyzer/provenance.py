@@ -1,5 +1,5 @@
 """
-Pochodzenie i historia pliku: Content Credentials, AI generatywne, wersja PS.
+Where a file came from: Content Credentials, generative AI, Photoshop version.
 
 The data lives in ImageSourceData blocks written as descriptors:
 
@@ -24,7 +24,7 @@ MANIFEST_MIN_SIZE = 2048
 
 @dataclass(frozen=True)
 class ContentCredentials:
-    """Stan Content Credentials odczytany z bloku ``CAI ``."""
+    """Content Credentials state, read from the ``CAI `` block."""
 
     present: bool
     enabled: bool | None = None

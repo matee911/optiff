@@ -116,9 +116,7 @@ def test_accounted_plus_gaps_covers_whole_file():
     found = gaps(accounted, file_size)
 
     # Assert
-    total = sum(item.size for item in accounted) + sum(
-        item.size for item in found
-    )
+    total = sum(item.size for item in accounted) + sum(item.size for item in found)
     assert total == file_size
 
 

@@ -58,11 +58,12 @@ def _digest(reader: ByteReader, layer, channel, bpp: int) -> tuple[str, str]:
         except (CodecError, ValueError, zlib.error):
             pass
 
-    # Bez uzytecznego prostokata nadal da sie dojsc do pikseli, o ile method
-    # need them: RAW is pixels already, and ZIP without prediction is one
-    # zlib.decompress. Dzieki temu channel spakowany przez --zip-fallback ma
-    # EXACTLY the same checksum as its raw original; otherwise verification
-    # would report an error for a change that is in fact lossless.
+    # Without a usable rectangle the pixels are still reachable, provided
+    # the method does not need one: RAW is pixels already, and ZIP without
+    # prediction is a single zlib.decompress. That gives a channel packed by
+    # --zip-fallback EXACTLY the same checksum as its raw original; otherwise
+    # verification would report an error for a change that is in fact
+    # lossless.
     if channel.compression in (RAW, ZIP):
         data = reader.read_at(channel.data_offset + HEADER, channel.pixel_bytes)
 
@@ -168,10 +169,10 @@ def compare(
     """
     Compares the checksums of the source and the result.
 
-    >>> a = ChannelDigest("tiff", "0:Tlo", "0:R", "abc", "pixels")
+    >>> a = ChannelDigest("tiff", "0:Sky", "0:R", "abc", "pixels")
     >>> compare([a], [a]).ok
     True
-    >>> b = ChannelDigest("tiff", "0:Tlo", "0:R", "zzz", "pixels")
+    >>> b = ChannelDigest("tiff", "0:Sky", "0:R", "zzz", "pixels")
     >>> compare([a], [b]).ok
     False
     >>> compare([a], []).problems
@@ -186,9 +187,7 @@ def compare(
 
     for source, result in zip(before, after, strict=False):
         if source.key() != result.key():
-            problems.append(
-                f"channel mismatch: {source.key()} vs {result.key()}"
-            )
+            problems.append(f"channel mismatch: {source.key()} vs {result.key()}")
             continue
 
         if source.digest != result.digest:

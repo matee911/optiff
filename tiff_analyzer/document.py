@@ -60,8 +60,16 @@ class TiffDocument:
         return self.path.stat().st_size
 
     @property
-    def first_page(self):
-        return self.tiff.pages[0]
+    def first_page(self) -> tifffile.TiffPage:
+        """
+        The first page of the file.
+
+        `TiffFile.pages` yields either a `TiffPage` or a `TiffFrame`; a frame
+        is a stripped-down page that carries no tags and only ever appears
+        from the second image onwards. `pages.first` is always a full page,
+        so this is where the distinction stops mattering.
+        """
+        return self.tiff.pages.first
 
     @property
     def image_info(self) -> ImageInfo:
@@ -219,7 +227,7 @@ class TiffDocument:
 
     def tiff_structure_ranges(self) -> tuple[PhysicalRange, ...]:
         """
-        Fizyczna struktura kontenera TIFF.
+        The physical structure of the TIFF container.
 
         Covers the TIFF header, the IFD itself and tag values stored outside
         the IFD. Excludes image data and the metadata blocks shown separately.

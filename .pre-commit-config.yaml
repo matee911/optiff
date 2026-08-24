@@ -1,0 +1,24 @@
+# Run on every commit. Install once with: pre-commit install
+#
+# The order matters: formatting first, so that `ruff check` and `pyrefly`
+# see the file the way it will actually be committed.
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff-format
+      - id: ruff-check
+
+  - repo: https://github.com/facebook/pyrefly-pre-commit
+    rev: 1.2.0
+    hooks:
+      - id: pyrefly-check
+        # The hook runs in its own environment, so the type checker has to be
+        # handed the same libraries the project imports. Without them every
+        # `import tifffile` is reported as missing.
+        additional_dependencies:
+          - tifffile>=2024.1.30
+          - numpy
+          - pytest>=8

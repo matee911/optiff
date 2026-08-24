@@ -35,8 +35,7 @@ def test_tag_value_size_matches_valuebytecount(synthetic_tiff: Path):
             for tag in document.first_page.tags.values()
         }
         expected = {
-            tag.code: tag.valuebytecount
-            for tag in document.first_page.tags.values()
+            tag.code: tag.valuebytecount for tag in document.first_page.tags.values()
         }
 
     # Assert
@@ -66,6 +65,7 @@ def test_tag_data_range_has_no_padding_fudge(synthetic_tiff: Path):
         physical_range = document.tag_data_range(XMP_TAG)
 
         # Assert
+        assert tag is not None
         assert physical_range is not None
         assert physical_range.start == tag.valueoffset
         assert physical_range.end == tag.valueoffset + tag.valuebytecount
@@ -81,9 +81,9 @@ def test_tiff_structure_includes_out_of_line_tag_values(synthetic_tiff: Path):
 
     # Assert - XMP (a few hundred bytes) does not fit inline, so it must be here
     assert xmp is not None
-    assert any(
-        item.start == xmp.start and item.end >= xmp.end for item in ranges
-    ), f"Brak zakresu XMP {xmp} w tiff_structure_ranges(): {ranges}"
+    assert any(item.start == xmp.start and item.end >= xmp.end for item in ranges), (
+        f"Brak zakresu XMP {xmp} w tiff_structure_ranges(): {ranges}"
+    )
 
 
 def test_context_manager_closes_document(synthetic_tiff: Path):
@@ -96,7 +96,7 @@ def test_context_manager_closes_document(synthetic_tiff: Path):
 
 
 # ============================================================================
-# REALNE PLIKI
+# REAL FILES
 # ============================================================================
 
 

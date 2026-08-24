@@ -38,8 +38,10 @@ def photoshop_channels(path: Path, limit: int = CHANNEL_LIMIT):
         analysis = TiffPhotoshopAnalyzer(analyzer).analyze(document)
         reader = document.photoshop_source_reader()
 
+        assert reader is not None, "the file has no tag 37724"
+
         if reader is None:
-            pytest.skip(f"{path.name} nie ma tagu 37724")
+            pytest.skip(f"{path.name} has no tag 37724")
 
         try:
             stack = read_layer_stack(analysis, reader)
@@ -61,9 +63,7 @@ def photoshop_channels(path: Path, limit: int = CHANNEL_LIMIT):
                         (
                             layer,
                             channel,
-                            reader.read_at(
-                                channel.pixel_offset, channel.pixel_bytes
-                            ),
+                            reader.read_at(channel.pixel_offset, channel.pixel_bytes),
                         )
                     )
 
@@ -126,7 +126,7 @@ def test_our_encoder_is_not_worse_than_adobe(sample_tiff: Path):
         ours = encode_channel(plain, compression=ZIP_PREDICTED, geometry=geometry)
 
         assert len(ours) <= channel.pixel_bytes * 1.05, (
-            f"{layer.name}/{channel.name}: nasz {len(ours):,} B "
+            f"{layer.name}/{channel.name}: ours {len(ours):,} B "
             f"vs Adobe {channel.pixel_bytes:,} B"
         )
 
@@ -145,11 +145,18 @@ def test_raw_channels_shrink_substantially(sample_named):
         analysis = TiffPhotoshopAnalyzer(analyzer).analyze(document)
         reader = document.photoshop_source_reader()
 
+        assert reader is not None, "the file has no tag 37724"
+
         try:
             linked = read_linked_files(analysis, reader)
+
+            assert linked is not None, "no block with linked smart objects"
+
             embedded = parse_document(
                 reader, linked.files[0].data_offset, linked.files[0].size
             )
+
+            assert embedded.layers is not None, "the embedded file has no layers"
 
             layer = embedded.layers.layers[0]
             channel = layer.channels[1]

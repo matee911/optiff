@@ -1,42 +1,41 @@
 /*
- * Wyciaga z pliku strukture warstw i KAZDA maske osobno.
+ * Pulls the layer tree out of a file, plus EVERY mask on its own.
  *
  * Why not through the flattened image: a layer covering the whole canvas hides
- * everything beneath it, so comparing composites passes vacuously - masks
- * nizej nie maja wtedy zadnego wplywu na result. Maske trzeba przeczytac
- * wprost.
+ * everything beneath it, so comparing composites passes vacuously - the masks
+ * underneath have no say in the result. Each mask has to be read directly.
  *
- * Jak: polecenie "duplikuj channel" wycelowane w channel masks laduje ja jako
- * zwykly channel alfa. Photoshop musi ja wtedy rozpakowac sam, wiec dostajemy
- * what it really sees, not what we wrote.
+ * How: the "duplicate channel" command aimed at the mask channel lands it as
+ * an ordinary alpha channel. Photoshop then has to decompress it itself, so
+ * what we get is what it really sees, not what we wrote.
  *
- * Wejscie i output ida przez files JSON obok tego skryptu. Uruchamia sie to
- * z mask_check.py, nie recznie.
+ * Input and output travel through JSON files sitting next to this script. It
+ * is started from mask_check.py, not by hand.
  */
 
 #target photoshop
 
-var TU = new File($.fileName).parent;
-var WEJSCIE = new File(TU + "/.mask_check_in.json");
-var WYJSCIE = new File(TU + "/.mask_check_out.json");
+var HERE = new File($.fileName).parent;
+var INPUT = new File(HERE + "/.mask_check_in.json");
+var OUTPUT = new File(HERE + "/.mask_check_out.json");
 
-function czytaj(file) {
+function readFile(file) {
     file.open("r");
     file.encoding = "UTF-8";
-    var tresc = file.read();
+    var content = file.read();
     file.close();
-    return tresc;
+    return content;
 }
 
-function pisz(file, tresc) {
+function writeFile(file, content) {
     file.open("w");
     file.encoding = "UTF-8";
-    file.write(tresc);
+    file.write(content);
     file.close();
 }
 
 /* ExtendScript has no JSON.stringify, hence this minimal serialiser. */
-function jsonTekst(v) {
+function jsonString(v) {
     return '"' + String(v)
         .replace(/\\/g, "\\\\")
         .replace(/"/g, '\\"')
@@ -47,7 +46,7 @@ function json(v) {
     if (v === null || v === undefined) { return "null"; }
     if (typeof v === "number") { return String(v); }
     if (typeof v === "boolean") { return v ? "true" : "false"; }
-    if (typeof v === "string") { return jsonTekst(v); }
+    if (typeof v === "string") { return jsonString(v); }
 
     if (v instanceof Array) {
         var e = [];
@@ -57,26 +56,26 @@ function json(v) {
 
     var p = [];
     for (var k in v) {
-        if (v.hasOwnProperty(k)) { p.push(jsonTekst(k) + ":" + json(v[k])); }
+        if (v.hasOwnProperty(k)) { p.push(jsonString(k) + ":" + json(v[k])); }
     }
     return "{" + p.join(",") + "}";
 }
 
-function drzewo(kolekcja, sciezka, result) {
-    for (var i = 0; i < kolekcja.length; i++) {
-        var w = kolekcja[i];
-        var name = sciezka + "/" + w.name;
+function walkTree(collection, path, result) {
+    for (var i = 0; i < collection.length; i++) {
+        var item = collection[i];
+        var name = path + "/" + item.name;
 
-        result.push({ warstwa: w, sciezka: name, typ: w.typename,
-                     widoczna: w.visible });
+        result.push({ layer: item, path: name, kind: item.typename,
+                      visible: item.visible });
 
-        if (w.typename === "LayerSet") { drzewo(w.layers, name, result); }
+        if (item.typename === "LayerSet") { walkTree(item.layers, name, result); }
     }
     return result;
 }
 
-function maskaDoAlfa(doc, warstwa) {
-    doc.activeLayer = warstwa;
+function maskToAlpha(doc, layer) {
+    doc.activeLayer = layer;
 
     var desc = new ActionDescriptor();
     var ref = new ActionReference();
@@ -90,7 +89,7 @@ function maskaDoAlfa(doc, warstwa) {
     return doc.channels[doc.channels.length - 1];
 }
 
-function opcjeTiff() {
+function tiffOptions() {
     var o = new TiffSaveOptions();
     o.imageCompression = TIFFEncoding.NONE;  /* so tifffile can read it without imagecodecs */
     o.layers = false;
@@ -99,92 +98,92 @@ function opcjeTiff() {
     return o;
 }
 
-function zapiszKanal(doc, channel, sciezkaPliku) {
+function saveChannel(doc, channel, targetPath) {
     doc.activeChannels = [channel];
     doc.selection.selectAll();
     doc.selection.copy();
     doc.selection.deselect();
 
-    var szary = app.documents.add(
+    var grey = app.documents.add(
         doc.width, doc.height, doc.resolution, "mask_check",
         NewDocumentMode.GRAYSCALE, DocumentFill.WHITE, 1,
         BitsPerChannelType.SIXTEEN
     );
 
-    app.activeDocument = szary;
-    szary.paste();
-    szary.flatten();
-    szary.saveAs(new File(sciezkaPliku), opcjeTiff(), true, Extension.LOWERCASE);
-    szary.close(SaveOptions.DONOTSAVECHANGES);
+    app.activeDocument = grey;
+    grey.paste();
+    grey.flatten();
+    grey.saveAs(new File(targetPath), tiffOptions(), true, Extension.LOWERCASE);
+    grey.close(SaveOptions.DONOTSAVECHANGES);
 
     app.activeDocument = doc;
 }
 
 /* We write the config file ourselves, so eval is safe here. */
-var cfg = eval("(" + czytaj(WEJSCIE) + ")");
-var raport = [];
+var cfg = eval("(" + readFile(INPUT) + ")");
+var report = [];
 
 for (var f = 0; f < cfg.files.length; f++) {
-    var sciezka = cfg.files[f];
-    var wpis = { file: sciezka, otwarty: false };
+    var path = cfg.files[f];
+    var entry = { file: path, opened: false };
 
     try {
-        var doc = app.open(new File(sciezka));
+        var doc = app.open(new File(path));
 
-        wpis.otwarty = true;
-        wpis.width = doc.width.value;
-        wpis.height = doc.height.value;
-        wpis.tryb = String(doc.mode);
-        wpis.bity = String(doc.bitsPerChannel);
+        entry.opened = true;
+        entry.width = doc.width.value;
+        entry.height = doc.height.value;
+        entry.mode = String(doc.mode);
+        entry.depth = String(doc.bitsPerChannel);
 
-        var warstwy = drzewo(doc.layers, "", []);
-        var label = [];
+        var layers = walkTree(doc.layers, "", []);
+        var tree = [];
         var masks = [];
 
-        for (var i = 0; i < warstwy.length; i++) {
-            label.push({ sciezka: warstwy[i].sciezka, typ: warstwy[i].typ,
-                        widoczna: warstwy[i].widoczna });
+        for (var i = 0; i < layers.length; i++) {
+            tree.push({ path: layers[i].path, kind: layers[i].kind,
+                        visible: layers[i].visible });
 
             var channel = null;
 
-            try { channel = maskaDoAlfa(doc, warstwy[i].warstwa); }
+            try { channel = maskToAlpha(doc, layers[i].layer); }
             catch (e) { continue; }
 
             var h = channel.histogram;
-            var total = 0, niepuste = 0;
+            var total = 0, used = 0;
 
             for (var b = 0; b < h.length; b++) {
                 total += h[b] * b;
-                if (h[b] > 0) { niepuste++; }
+                if (h[b] > 0) { used++; }
             }
 
-            var wpisMaski = { sciezka: warstwy[i].sciezka, total: total,
-                              koszyki: niepuste, histogram: h.join(","),
-                              piksele: null };
+            var maskEntry = { path: layers[i].path, total: total,
+                              buckets: used, histogram: h.join(","),
+                              pixels: null };
 
-            if (cfg.piksele && niepuste >= cfg.threshold) {
-                var etykieta = warstwy[i].sciezka.replace(/[^A-Za-z0-9]+/g, "_");
-                var target = cfg.katalog + "/px_" + f + etykieta + ".tif";
+            if (cfg.pixels && used >= cfg.threshold) {
+                var label = layers[i].path.replace(/[^A-Za-z0-9]+/g, "_");
+                var target = cfg.directory + "/px_" + f + label + ".tif";
 
-                zapiszKanal(doc, channel, target);
-                wpisMaski.piksele = target;
+                saveChannel(doc, channel, target);
+                maskEntry.pixels = target;
             }
 
-            masks.push(wpisMaski);
+            masks.push(maskEntry);
             channel.remove();
         }
 
-        wpis.warstwy = label;
-        wpis.masks = masks;
+        entry.layers = tree;
+        entry.masks = masks;
 
         doc.close(SaveOptions.DONOTSAVECHANGES);
     } catch (e) {
-        wpis.error = String(e);
+        entry.error = String(e);
     }
 
-    raport.push(wpis);
+    report.push(entry);
 }
 
-pisz(WYJSCIE, json(raport));
+writeFile(OUTPUT, json(report));
 
-"done: " + raport.length + " plikow";
+"done: " + report.length + " files";

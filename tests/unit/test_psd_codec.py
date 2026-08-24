@@ -99,7 +99,7 @@ def test_round_trip(compression, bpp):
 
 
 def test_smooth_data_compresses_well_with_prediction():
-    # Arrange - gradient to najlepszy przypadek dla predykcji
+    # Arrange - a gradient is the best case for prediction
     width, rows = 512, 64
     gradient = np.tile(np.arange(width, dtype=">u2"), (rows, 1)).tobytes()
 
@@ -195,7 +195,7 @@ def test_unsupported_depth_is_rejected():
 
 
 # ============================================================================
-# REKOMPRESJA
+# RECOMPRESSION
 # ============================================================================
 
 

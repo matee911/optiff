@@ -35,9 +35,7 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
 def section(output: str, name: str) -> list[str]:
     """The lines of the named section, without its frame."""
     lines = output.splitlines()
-    start = next(
-        index for index, line in enumerate(lines) if line.strip() == name
-    )
+    start = next(index for index, line in enumerate(lines) if line.strip() == name)
 
     body: list[str] = []
 
@@ -50,7 +48,7 @@ def section(output: str, name: str) -> list[str]:
 
 
 # ============================================================================
-# PRZEBIEG
+# RUNNING IT
 # ============================================================================
 
 
@@ -75,7 +73,7 @@ def test_prints_all_sections_in_order(synthetic_psd_tiff: Path):
 
 def test_missing_file_fails_without_traceback(tmp_path: Path):
     # Act
-    result = run(str(tmp_path / "nie-ma-mnie.tif"))
+    result = run(str(tmp_path / "no-such-file.tif"))
 
     # Assert
     assert result.returncode != 0
@@ -86,8 +84,8 @@ def test_missing_file_fails_without_traceback(tmp_path: Path):
 
 def test_non_tiff_fails_without_traceback(tmp_path: Path):
     # Arrange
-    path = tmp_path / "to-nie-tiff.tif"
-    path.write_bytes(b"zupelnie nie tiff" * 20)
+    path = tmp_path / "not-a-tiff.tif"
+    path.write_bytes(b"not a tiff at all" * 20)
 
     # Act
     result = run(str(path))
@@ -134,9 +132,7 @@ def test_size_tree_glyphs_are_consistent(synthetic_psd_tiff: Path):
     assert sum(line.startswith("└──") for line in nodes) == 1
     assert nodes[-1].startswith("└──")
 
-    last = max(
-        index for index, line in enumerate(body) if line.startswith("└──")
-    )
+    last = max(index for index, line in enumerate(body) if line.startswith("└──"))
     assert not any(line.startswith("├──") for line in body[last + 1 :])
 
 
@@ -159,9 +155,9 @@ def test_percentages_do_not_exceed_one_hundred(synthetic_psd_tiff: Path):
     # Assert
     percentages = [
         float(value)
-        for value in re.findall(r"(\d+\.\d\d)%", "\n".join(
-            section(result.stdout, "SIZE TREE")
-        ))
+        for value in re.findall(
+            r"(\d+\.\d\d)%", "\n".join(section(result.stdout, "SIZE TREE"))
+        )
     ]
     assert percentages
     assert sum(percentages) <= 100.01

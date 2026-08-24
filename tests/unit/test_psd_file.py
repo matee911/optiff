@@ -1,4 +1,4 @@
-"""Testy parsera osadzonego pliku PSD/PSB (big-endian, bez byte-swappingu)."""
+"""Tests for the embedded PSD/PSB parser (big-endian, no byte-swapping)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def be(value: int, width: int) -> bytes:
     return value.to_bytes(width, "big")
 
 
-def header(  # noqa: PLR0913  - builder testowy, wariant per parametr
+def header(  # noqa: PLR0913  - a test builder, one knob per variant
     *,
     version: int = 2,
     channels: int = 3,
@@ -57,8 +57,10 @@ def layer_record_be(
     extra = be(0, 4) + be(0, 4) + pascal
 
     return (
-        b"".join(value.to_bytes(4, "big", signed=True)
-                 for value in (top, left, bottom, right))
+        b"".join(
+            value.to_bytes(4, "big", signed=True)
+            for value in (top, left, bottom, right)
+        )
         + be(len(channels), 2)
         + b"".join(
             channel_id.to_bytes(2, "big", signed=True) + be(size, 8 if large else 4)
@@ -154,7 +156,7 @@ def test_image_compression(marker, expected):
 
 
 # ============================================================================
-# SEKCJE
+# SECTIONS
 # ============================================================================
 
 
@@ -181,14 +183,17 @@ def test_sections_tile_the_file_exactly():
 
 def test_section_sizes():
     # Act
-    doc = parse(
-        document(color_mode_data=b"abcd", image_resources=b"x" * 100)
-    )
+    doc = parse(document(color_mode_data=b"abcd", image_resources=b"x" * 100))
 
     # Assert
-    assert doc.section("Color Mode Data").size == 4
-    assert doc.section("Image Resources").size == 100
-    assert doc.section("Color Mode Data").total_size == 8
+    color_mode = doc.section("Color Mode Data")
+    resources = doc.section("Image Resources")
+
+    assert color_mode is not None
+    assert resources is not None
+    assert color_mode.size == 4
+    assert resources.size == 100
+    assert color_mode.total_size == 8
 
 
 def test_sections_are_contiguous():
@@ -218,17 +223,17 @@ def test_overrunning_section_is_reported():
 
 
 def test_unknown_section_lookup_returns_none():
-    assert parse(document()).section("Nie ma takiej") is None
+    assert parse(document()).section("No such section") is None
 
 
 # ============================================================================
-# WARSTWY
+# LAYERS
 # ============================================================================
 
 
 def test_classic_layer_info_is_read():
-    # Arrange - dokument 8-bitowy trzyma warstwy w Layer Info
-    records = layer_record_be("Tlo") + layer_record_be("Gora")
+    # Arrange - an 8-bit document keeps its layers in Layer Info
+    records = layer_record_be("Background") + layer_record_be("Top")
     layer_info = be(2, 2) + records
 
     data = document(
@@ -241,7 +246,7 @@ def test_classic_layer_info_is_read():
 
     # Assert
     assert doc.layers is not None
-    assert [layer.name for layer in doc.layers.layers] == ["Tlo", "Gora"]
+    assert [layer.name for layer in doc.layers.layers] == ["Background", "Top"]
 
 
 def test_layers_in_lr16_additional_block():
@@ -275,7 +280,7 @@ def test_no_layers_when_section_empty():
 def test_channel_sizes_are_big_endian():
     # Arrange
     layer_info = be(1, 2) + layer_record_be(
-        "Z kanalami", channels=((0, 10), (1, 20))
+        "With channels", channels=((0, 10), (1, 20))
     )
     data = document(
         depth=8,
@@ -286,6 +291,7 @@ def test_channel_sizes_are_big_endian():
     doc = parse(data)
 
     # Assert
+    assert doc.layers is not None
     assert doc.layers.layers[0].data_size == 30
 
 
