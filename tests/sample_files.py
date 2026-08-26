@@ -60,6 +60,12 @@ SECTION_DIVIDER = "lsct"
 GROUP_OPEN, GROUP_END = 1, 3
 
 
+def _walk(rng: np.random.Generator, width: int, n_rows: int) -> np.ndarray:
+    """The random walk itself, before wrapping to 16 bits - `detail` layers
+    texture on top of this same walk, rather than its own copy of it."""
+    return np.cumsum(rng.integers(-4, 5, size=(n_rows, width)), axis=1)
+
+
 def _walk_chunk(rng: np.random.Generator, width: int, n_rows: int) -> bytes:
     """
     `n_rows` rows of the random walk, drawn from `rng`.
@@ -77,9 +83,7 @@ def _walk_chunk(rng: np.random.Generator, width: int, n_rows: int) -> bytes:
     >>> whole == chunked
     True
     """
-    walk = np.cumsum(rng.integers(-4, 5, size=(n_rows, width)), axis=1)
-
-    return (walk % 65536).astype(">u2").tobytes()
+    return (_walk(rng, width, n_rows) % 65536).astype(">u2").tobytes()
 
 
 def smooth(seed: int, *, width: int = WIDTH, rows: int = ROWS) -> bytes:
@@ -147,7 +151,7 @@ def detail(seed: int, *, width: int = WIDTH, rows: int = ROWS) -> bytes:
     False
     """
     rng = np.random.default_rng(seed)
-    walk = np.cumsum(rng.integers(-4, 5, size=(rows, width)), axis=1)
+    walk = _walk(rng, width, rows)
     texture = rng.integers(-20, 21, size=(rows, width))
 
     return ((walk + texture) % 65536).astype(">u2").tobytes()
