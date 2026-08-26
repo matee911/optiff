@@ -12,6 +12,13 @@ Both limits are the same constant, **2^31 = 2 147 483 648**, which looks like a
 signed 32-bit offset overflowing. Neither threshold was fitted to the data; the
 rule agrees with **13 observations out of 13**.
 
+A file crossing the boundary in tag 37724 no longer requires one of the client
+files measured above - `tests/sample_files.py --scale` streams one on demand:
+
+```bash
+python -m tests.sample_files DIR --only raw-layers --scale 155345 --yes
+```
+
 ## The threshold, narrowed by halving the interval
 
 Seven variants of **the same file** with **identical pixels** (SHA256 equal
