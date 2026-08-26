@@ -68,6 +68,7 @@ python -m optiff optimize FILE.tif --out RESULT.tif       # compress the layers
 | `tools/mask_check.py` | compares two files through Photoshop, mask by mask |
 | `tools/verify_in_photoshop.jsx` | checks a whole batch of source/result pairs |
 | `tools/affinity_bisect.py` | builds variants of one file at chosen tag sizes |
+| `tools/benchmark.py` | sweeps deflate levels 1-9 and charts the size/time trade-off |
 
 ## Development
 
@@ -112,6 +113,22 @@ python -m tests.sample_files /some/directory
 Tests that need real files read their mapping from `tests/samples.local.json`
 (template: `tests/samples.example.json`). That file is git-ignored so private
 file names never reach the repository.
+
+## Benchmark
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/levels-dark.svg">
+  <img src="docs/levels.svg" alt="Deflate level vs. compressed size and time, one line per content profile">
+</picture>
+
+Time on x, compressed size on y, one point per deflate level (1-9), one line
+per synthetic content profile (`smooth`, `grain`, `flat`, `detail`, `banded` -
+see `tests/sample_files.py`). Reproduce it with `python -m tools.benchmark`.
+
+This is measured on **generated** content, not the nine real files behind the
+54%/33% figures above - those two claims stay deliberately apart. What this
+chart is for: seeing *where* the size/time trade-off bends, independent of
+any one archive's mixture of content.
 
 ## Documentation
 
