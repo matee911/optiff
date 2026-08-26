@@ -60,6 +60,12 @@ SECTION_DIVIDER = "lsct"
 GROUP_OPEN, GROUP_END = 1, 3
 
 
+def _walk(rng: np.random.Generator, width: int, n_rows: int) -> np.ndarray:
+    """The random walk itself, before wrapping to 16 bits - `detail` layers
+    texture on top of this same walk, rather than its own copy of it."""
+    return np.cumsum(rng.integers(-4, 5, size=(n_rows, width)), axis=1)
+
+
 def _walk_chunk(rng: np.random.Generator, width: int, n_rows: int) -> bytes:
     """
     `n_rows` rows of the random walk, drawn from `rng`.
@@ -77,17 +83,16 @@ def _walk_chunk(rng: np.random.Generator, width: int, n_rows: int) -> bytes:
     >>> whole == chunked
     True
     """
-    walk = np.cumsum(rng.integers(-4, 5, size=(n_rows, width)), axis=1)
-
-    return (walk % 65536).astype(">u2").tobytes()
+    return (_walk(rng, width, n_rows) % 65536).astype(">u2").tobytes()
 
 
-def smooth(seed: int) -> bytes:
+def smooth(seed: int, *, width: int = WIDTH, rows: int = ROWS) -> bytes:
     """
     16-bit pixels with the local continuity real photographic layers have.
 
     Pure noise would compress to nothing and every case would look like a
-    no-op, which is the opposite of what we want to measure.
+    no-op, which is the opposite of what we want to measure. Stands in for
+    gradients, skin, backgrounds - the ordinary case.
 
     >>> len(smooth(1)) == WIDTH * ROWS * BPP
     True
@@ -96,7 +101,89 @@ def smooth(seed: int) -> bytes:
     >>> smooth(1) == smooth(2)
     False
     """
-    return _walk_chunk(np.random.default_rng(seed), WIDTH, ROWS)
+    return _walk_chunk(np.random.default_rng(seed), width, rows)
+
+
+def grain(seed: int, *, width: int = WIDTH, rows: int = ROWS) -> bytes:
+    """
+    Independent uniform noise - film grain, high ISO. Near-incompressible:
+    no pixel predicts its neighbour, so deflate has nothing to exploit.
+
+    >>> grain(1) == grain(1)
+    True
+    >>> grain(1) == grain(2)
+    False
+    """
+    rng = np.random.default_rng(seed)
+
+    return rng.integers(0, 65536, size=(rows, width)).astype(">u2").tobytes()
+
+
+def flat(seed: int, *, width: int = WIDTH, rows: int = ROWS) -> bytes:
+    """
+    Nearly one constant value - a mask that's mostly white, an empty retouch
+    layer. Compresses to almost nothing; the rare jittered pixel keeps it
+    from being literally one repeated byte.
+
+    >>> flat(1) == flat(1)
+    True
+    >>> flat(1) == flat(2)
+    False
+    """
+    rng = np.random.default_rng(seed)
+    base = int(rng.integers(0, 65536))
+    arr = np.full((rows, width), base, dtype=np.int64)
+    jittered = rng.random((rows, width)) < 0.002
+    arr[jittered] += rng.integers(-1, 2, size=int(jittered.sum()))
+
+    return (arr % 65536).astype(">u2").tobytes()
+
+
+def detail(seed: int, *, width: int = WIDTH, rows: int = ROWS) -> bytes:
+    """
+    A random walk (like `smooth`) with independent noise layered on top -
+    hair, texture. Some structure survives prediction, but less than
+    `smooth`'s: middling compressibility, right where prediction earns most.
+
+    >>> detail(1) == detail(1)
+    True
+    >>> detail(1) == detail(2)
+    False
+    """
+    rng = np.random.default_rng(seed)
+    walk = _walk(rng, width, rows)
+    texture = rng.integers(-20, 21, size=(rows, width))
+
+    return ((walk + texture) % 65536).astype(">u2").tobytes()
+
+
+def banded(seed: int, *, width: int = WIDTH, rows: int = ROWS) -> bytes:
+    """
+    A horizontal gradient, identical on every row - the best case for
+    prediction that differences along a row: each pixel is one small,
+    constant step from the last.
+
+    >>> banded(1) == banded(1)
+    True
+    >>> banded(1) == banded(2)
+    False
+    """
+    rng = np.random.default_rng(seed)
+    step = int(rng.integers(50, 500))
+    row = (np.arange(width) * step) % 65536
+
+    return np.tile(row, (rows, 1)).astype(">u2").tobytes()
+
+
+#: Every pixel-content generator, by name - what `tools/benchmark.py` sweeps
+#: over. Same signature as `smooth`: `(seed, *, width=WIDTH, rows=ROWS)`.
+CONTENT_PROFILES: dict[str, Callable[..., bytes]] = {
+    "smooth": smooth,
+    "grain": grain,
+    "flat": flat,
+    "detail": detail,
+    "banded": banded,
+}
 
 
 def packbits(data: bytes) -> bytes:
