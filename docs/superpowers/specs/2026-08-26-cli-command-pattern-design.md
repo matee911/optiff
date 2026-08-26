@@ -124,7 +124,7 @@ AnalyzeReport
 ├── metadata: dict[str, str]             # from MetadataAnalyzer.report()
 ├── provenance: ProvenanceSection        # new: see below
 ├── photoshop: PhotoshopAnalysis         # already in domain.py
-├── layers: LayerStack | None            # already in psd_layers.py
+├── layers: LayersSection                # new: see below
 ├── linked_files: LinkedFilesSection | None   # new: see below
 ├── physical_gaps: list[GapClassification]    # new: see below
 ├── structure: list[TagInfo]             # new: see below
@@ -136,6 +136,14 @@ class ProvenanceSection:
     # exactly the three states Reporter._print_provenance distinguishes today
     state: Literal["no-blocks", "no-tag", "found"]
     report: dict[str, str] | None  # Provenance.report(), only when state == "found"
+
+@dataclass(frozen=True)
+class LayersSection:
+    # Reporter._print_layers distinguishes two different "nothing here"
+    # messages ("No tag 37724." vs "No layer section (Lr16 / Lr32 / Layr).") -
+    # a bare `LayerStack | None` cannot tell them apart.
+    state: Literal["no-tag", "no-section", "found"]
+    stack: LayerStack | None  # only when state == "found"
 
 @dataclass(frozen=True)
 class GapClassification:
