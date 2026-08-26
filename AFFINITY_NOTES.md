@@ -44,7 +44,7 @@ threshold was not narrowed further.
 
 | | what it is | does compression change it? |
 |---|---|---|
-| **tag 37724** | how many bytes it takes on disk | **yes** - that is what `--optimize` does |
+| **tag 37724** | how many bytes it takes on disk | **yes** - that is what `optiff optimize FILE --out OUT` does |
 | **decompressed layer data** | the sum of every channel's pixels once decoded | **no** |
 
 The second quantity is `width x height x bytes_per_pixel` summed over the
@@ -58,10 +58,10 @@ far below the limit, and they still open flat.
 ## State of the test set
 
 All nine originals have a tag of at least 1.99 GB, **eight of them above 2 GB**,
-so out of Photoshop they do not open with layers. After `--optimize` the tag
-drops to 0.6-1.3 GB.
+so out of Photoshop they do not open with layers. After
+`optiff optimize FILE --out OUT` the tag drops to 0.6-1.3 GB.
 
-| file | tag after `--optimize` | decompressed | outcome |
+| file | tag after `optiff optimize FILE --out OUT` | decompressed | outcome |
 |---|---|---|---|
 | `sample-a0400` | 1.25 GB | 0.31 GB | fixed |
 | `sample-a0432` | 0.76 GB | 0.54 GB | fixed |
@@ -75,7 +75,7 @@ drops to 0.6-1.3 GB.
 
 **Optimization fixes Affinity compatibility rather than breaking it.**
 `sample-d0493` straight out of Photoshop (tag 2.27 GB) opens flat; after
-`--optimize` (1.03 GB) it shows its layers.
+`optiff optimize FILE --out OUT` (1.03 GB) it shows its layers.
 
 How much would have to disappear from the unfixable files, counted in
 full-canvas channels:
@@ -250,4 +250,4 @@ out false.
 The realistic scope is **reporting**, not repair: the analyser knows both
 quantities, so before writing it can say whether a file will open with layers in
 Affinity and **which of the two quantities blocks it**. Only the first is
-fixable, and plain `--optimize` already does that.
+fixable, and plain `optiff optimize FILE --out OUT` already does that.

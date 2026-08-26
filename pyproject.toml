@@ -19,6 +19,7 @@ optiff = "optiff.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "pytest-cov>=5",
     "ruff>=0.16",
     "pyrefly>=1.2",
     "pre-commit>=4",
@@ -47,6 +48,12 @@ markers = [
     "bigfile: needs multi-gigabyte production files",
 ]
 filterwarnings = ["error", "ignore::DeprecationWarning:tifffile.*"]
+
+[tool.coverage.run]
+source = ["optiff"]
+
+[tool.coverage.report]
+show_missing = true
 
 [tool.ruff]
 line-length = 88

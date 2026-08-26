@@ -1,0 +1,93 @@
+================================================================================
+TIFF STORAGE ANALYZER
+================================================================================
+File:          <PATH>
+File size:     18.47 KB (18,912 bytes)
+Format:        Classic TIFF
+Byte order:    little-endian
+Image:         48 × 64
+
+================================================================================
+SIZE TREE
+================================================================================
+
+    18.47 KB  TIFF
+├──     18.00 KB  IMAGE DATA                              97.46%
+│   ├── 48 × 64
+│   ├── 3 samples × 16-bit
+│   ├── Compression: NONE
+│   └── Predictor: 1
+└──     195.00 B  XMP                                      1.03%
+    └── TIFF tag 700
+
+================================================================================
+EMBEDDED METADATA / CONTENT
+================================================================================
+
+XMP:                             195.00 B
+Content Credentials in XMP:      NO / not detected
+C2PA in XMP:                     NO
+Photoshop Image Resources:       NOT FOUND
+Photoshop ImageSourceData:       NOT FOUND
+IPTC:                            NOT FOUND
+ICC Profile:                     NOT FOUND
+EXIF:                            NOT FOUND
+
+================================================================================
+PROVENANCE / HISTORY
+================================================================================
+
+No ImageSourceData blocks - nothing to read.
+
+================================================================================
+PHOTOSHOP IMAGESOURCEDATA
+================================================================================
+
+Photoshop ImageSourceData: NOT DETECTED
+
+================================================================================
+LAYERS
+================================================================================
+
+No tag 37724.
+
+================================================================================
+UNACCOUNTED PHYSICAL AREAS
+================================================================================
+
+ 1.      15.00 B  offset=0xEB end=0xFA
+    Type:       ZERO / PADDING
+ 2.       7.00 B  offset=0x1D9 end=0x1E0
+    Type:       ZERO / PADDING
+
+================================================================================
+TIFF STRUCTURE / ENTRIES
+================================================================================
+
+    256  ImageWidth                          LONG       count=1          size=    4.00 B
+    257  ImageLength                         LONG       count=1          size=    4.00 B
+    258  BitsPerSample                       SHORT      count=3          size=    6.00 B
+    259  Compression                         SHORT      count=1          size=    2.00 B
+    262  PhotometricInterpretation           SHORT      count=1          size=    2.00 B
+    270  ImageDescription                    ASCII      count=23         size=   23.00 B
+    273  StripOffsets                        LONG       count=1          size=    4.00 B
+    277  SamplesPerPixel                     SHORT      count=1          size=    2.00 B
+    278  RowsPerStrip                        LONG       count=1          size=    4.00 B
+    279  StripByteCounts                     LONG       count=1          size=    4.00 B
+    282  XResolution                         RATIONAL   count=1          size=    8.00 B
+    283  YResolution                         RATIONAL   count=1          size=    8.00 B
+    284  PlanarConfiguration                 SHORT      count=1          size=    2.00 B
+    296  ResolutionUnit                      SHORT      count=1          size=    2.00 B
+    305  Software                            ASCII      count=12         size=   12.00 B
+    700  XMP                                 BYTE       count=195        size=  195.00 B
+
+================================================================================
+COMPRESSION / IMAGE DATA
+================================================================================
+
+Compression: NONE
+Predictor:   1
+Bits/sample: [16]
+================================================================================
+DONE
+================================================================================

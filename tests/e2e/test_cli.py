@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from optiff.cli import _duration, main
+import optiff.cli as cli_module
+from optiff.cli import main
+from optiff.formatters.optimize import _duration
 
 SECTIONS = [
     "SIZE TREE",
@@ -54,7 +57,7 @@ def section(output: str, name: str) -> list[str]:
 
 def test_exits_cleanly_on_valid_tiff(synthetic_psd_tiff: Path):
     # Act
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Assert
     assert result.returncode == 0
@@ -64,7 +67,7 @@ def test_exits_cleanly_on_valid_tiff(synthetic_psd_tiff: Path):
 
 def test_prints_all_sections_in_order(synthetic_psd_tiff: Path):
     # Act
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Assert
     positions = [result.stdout.index(name) for name in SECTIONS]
@@ -73,7 +76,7 @@ def test_prints_all_sections_in_order(synthetic_psd_tiff: Path):
 
 def test_missing_file_fails_without_traceback(tmp_path: Path):
     # Act
-    result = run(str(tmp_path / "no-such-file.tif"))
+    result = run("analyze", str(tmp_path / "no-such-file.tif"))
 
     # Assert
     assert result.returncode != 0
@@ -88,7 +91,7 @@ def test_non_tiff_fails_without_traceback(tmp_path: Path):
     path.write_bytes(b"not a tiff at all" * 20)
 
     # Act
-    result = run(str(path))
+    result = run("analyze", str(path))
 
     # Assert
     assert result.returncode != 0
@@ -106,7 +109,7 @@ def test_version_flag():
 
 def test_main_is_callable_in_process(synthetic_psd_tiff: Path, capsys):
     # Act
-    code = main([str(synthetic_psd_tiff)])
+    code = main(["analyze", str(synthetic_psd_tiff)])
     captured = capsys.readouterr()
 
     # Assert
@@ -122,7 +125,7 @@ def test_main_is_callable_in_process(synthetic_psd_tiff: Path, capsys):
 
 def test_size_tree_glyphs_are_consistent(synthetic_psd_tiff: Path):
     # Arrange - regresja Bug 6
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Act
     body = [line for line in section(result.stdout, "SIZE TREE") if line.strip()]
@@ -138,7 +141,7 @@ def test_size_tree_glyphs_are_consistent(synthetic_psd_tiff: Path):
 
 def test_metadata_sizes_are_not_zero(synthetic_psd_tiff: Path):
     # Arrange - regresja Bug 9
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Act
     body = section(result.stdout, "EMBEDDED METADATA / CONTENT")
@@ -150,7 +153,7 @@ def test_metadata_sizes_are_not_zero(synthetic_psd_tiff: Path):
 
 def test_percentages_do_not_exceed_one_hundred(synthetic_psd_tiff: Path):
     # Act
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Assert
     percentages = [
@@ -165,7 +168,7 @@ def test_percentages_do_not_exceed_one_hundred(synthetic_psd_tiff: Path):
 
 def test_photoshop_blocks_are_listed(synthetic_psd_tiff: Path):
     # Act
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
     body = "\n".join(section(result.stdout, "PHOTOSHOP IMAGESOURCEDATA"))
 
     # Assert - logical keys and resolved descriptions (Bug 4 regression)
@@ -176,7 +179,7 @@ def test_photoshop_blocks_are_listed(synthetic_psd_tiff: Path):
 
 def test_tiff_without_photoshop_reports_not_detected(synthetic_tiff: Path):
     # Act
-    result = run(str(synthetic_tiff))
+    result = run("analyze", str(synthetic_tiff))
 
     # Assert
     assert result.returncode == 0
@@ -186,7 +189,7 @@ def test_tiff_without_photoshop_reports_not_detected(synthetic_tiff: Path):
 @pytest.mark.slow
 def test_report_on_real_file(sample_tiff: Path):
     # Act
-    result = run(str(sample_tiff))
+    result = run("analyze", str(sample_tiff))
 
     # Assert
     assert result.returncode == 0
@@ -198,6 +201,67 @@ def test_report_on_real_file(sample_tiff: Path):
 
     blocks = "\n".join(section(result.stdout, "PHOTOSHOP IMAGESOURCEDATA"))
     assert "Parsed blocks:   7" in blocks
+
+
+# ============================================================================
+# PIPES
+# ============================================================================
+
+
+def run_piped(command: str) -> subprocess.CompletedProcess[str]:
+    """
+    Runs `command` under bash with `pipefail`, so the returncode reflects
+    the FIRST failing stage (optiff), not just the last one (head/grep).
+    Plain `sh -c "a | b"` (dash on most Linux distros has no `pipefail`)
+    would report `b`'s exit code even if `a` crashed - exactly the failure
+    mode this test exists to catch, so it must not silently pass anyway.
+    """
+    return subprocess.run(
+        ["bash", "-c", f"set -o pipefail; {command}"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+    )
+
+
+def test_pipes_into_head_without_traceback(synthetic_psd_tiff: Path):
+    # Act - `head -3` closes its end of the pipe before optiff finishes
+    # writing, which raises BrokenPipeError on the next print()
+    quoted = shlex.quote(str(synthetic_psd_tiff))
+    result = run_piped(f"{sys.executable} -m optiff analyze {quoted} | head -3")
+
+    # Assert
+    assert result.returncode == 0
+    assert "Traceback" not in result.stderr
+
+
+def test_pipes_into_grep_without_traceback(synthetic_psd_tiff: Path):
+    # Act
+    quoted = shlex.quote(str(synthetic_psd_tiff))
+    result = run_piped(f"{sys.executable} -m optiff analyze {quoted} | grep -q LAYERS")
+
+    # Assert
+    assert result.returncode == 0
+    assert "Traceback" not in result.stderr
+
+
+def test_main_survives_broken_pipe(monkeypatch, synthetic_psd_tiff: Path):
+    # Arrange
+    def _raise(argv):
+        raise BrokenPipeError
+
+    monkeypatch.setattr(cli_module, "_main", _raise)
+    monkeypatch.setattr(cli_module.os, "open", lambda *a, **k: -1)
+    monkeypatch.setattr(cli_module.os, "dup2", lambda *a, **k: None)
+    monkeypatch.setattr(cli_module.os, "close", lambda *a, **k: None)
+
+    # Act
+    code = main(["analyze", str(synthetic_psd_tiff)])
+
+    # Assert
+    assert code == 0
 
 
 def test_duration_formatting():

@@ -1,5 +1,7 @@
 # optiff
 
+[![codecov](https://codecov.io/github/matee911/optiff/graph/badge.svg?token=NPU5EC11CA)](https://codecov.io/github/matee911/optiff)
+
 Lossless recompression of layered TIFF files carrying a Photoshop block,
 including the layers **inside embedded smart objects**.
 
@@ -44,9 +46,11 @@ BSD-licensed.
 ## Usage
 
 ```bash
-python -m optiff FILE.tif                       # analysis only
-python -m optiff FILE.tif --optimize RESULT.tif # compress the layers
+python -m optiff analyze FILE.tif                        # analysis only
+python -m optiff optimize FILE.tif --out RESULT.tif       # compress the layers
 ```
+
+`optimize` also takes:
 
 | flag | default | what it does |
 |---|---|---|
