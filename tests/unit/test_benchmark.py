@@ -12,6 +12,8 @@ import pytest
 
 from tools.benchmark import (
     LevelResult,
+    _format_bytes,
+    _format_seconds,
     _scale,
     grain_inversion,
     render_svg,
@@ -94,5 +96,34 @@ def test_render_svg_is_well_formed_and_theme_specific():
         # one labelled point per (profile, level)
         expected_points = sum(len(levels) for levels in results.values())
         assert len(re.findall(r"<circle", svg)) == expected_points + len(results)
+        # 5 y-axis size ticks + 5 x-axis time ticks
+        assert (
+            svg.count(" KB</text>")
+            + svg.count(" B</text>")
+            + svg.count(" MB</text>")
+            + svg.count(" GB</text>")
+            >= 1
+        )
+        assert svg.count(" ms</text>") + svg.count(" s</text>") >= 1
 
     assert light != dark
+
+
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [
+        (500, "500 B"),
+        (1_500, "1.5 KB"),
+        (2_500_000, "2.5 MB"),
+        (3_200_000_000, "3.2 GB"),
+    ],
+)
+def test_format_bytes(size, expected):
+    assert _format_bytes(size) == expected
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"), [(0.0123, "12 ms"), (1.5, "1.50 s"), (0.0, "0 ms")]
+)
+def test_format_seconds(seconds, expected):
+    assert _format_seconds(seconds) == expected
