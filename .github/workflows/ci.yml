@@ -49,4 +49,8 @@ jobs:
       - run: pyrefly check --python-interpreter-path "$(which python)"
 
       # The suite needs no sample files - it generates them.
-      - run: pytest
+      - run: pytest --cov=optiff --cov-report=term-missing --cov-report=xml
+
+      - uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
