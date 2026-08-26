@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -198,6 +199,69 @@ def test_report_on_real_file(sample_tiff: Path):
 
     blocks = "\n".join(section(result.stdout, "PHOTOSHOP IMAGESOURCEDATA"))
     assert "Parsed blocks:   7" in blocks
+
+
+# ============================================================================
+# PIPES
+# ============================================================================
+
+
+def run_piped(command: str) -> subprocess.CompletedProcess[str]:
+    """
+    Runs `command` under bash with `pipefail`, so the returncode reflects
+    the FIRST failing stage (optiff), not just the last one (head/grep).
+    Plain `sh -c "a | b"` (dash on most Linux distros has no `pipefail`)
+    would report `b`'s exit code even if `a` crashed - exactly the failure
+    mode this test exists to catch, so it must not silently pass anyway.
+    """
+    return subprocess.run(
+        ["bash", "-c", f"set -o pipefail; {command}"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+    )
+
+
+def test_pipes_into_head_without_traceback(synthetic_psd_tiff: Path):
+    # Act - `head -3` closes its end of the pipe before optiff finishes
+    # writing, which raises BrokenPipeError on the next print()
+    quoted = shlex.quote(str(synthetic_psd_tiff))
+    result = run_piped(f"{sys.executable} -m optiff analyze {quoted} | head -3")
+
+    # Assert
+    assert result.returncode == 0
+    assert "Traceback" not in result.stderr
+
+
+def test_pipes_into_grep_without_traceback(synthetic_psd_tiff: Path):
+    # Act
+    quoted = shlex.quote(str(synthetic_psd_tiff))
+    result = run_piped(f"{sys.executable} -m optiff analyze {quoted} | grep -q LAYERS")
+
+    # Assert
+    assert result.returncode == 0
+    assert "Traceback" not in result.stderr
+
+
+def test_main_survives_broken_pipe(monkeypatch, synthetic_psd_tiff: Path):
+    # Arrange
+    import optiff.cli as cli_module
+
+    def _raise(argv):
+        raise BrokenPipeError
+
+    monkeypatch.setattr(cli_module, "_main", _raise)
+    monkeypatch.setattr(cli_module.os, "open", lambda *a, **k: -1)
+    monkeypatch.setattr(cli_module.os, "dup2", lambda *a, **k: None)
+    monkeypatch.setattr(cli_module.os, "close", lambda *a, **k: None)
+
+    # Act
+    code = main(["analyze", str(synthetic_psd_tiff)])
+
+    # Assert
+    assert code == 0
 
 
 def test_duration_formatting():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -182,6 +183,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except BrokenPipeError:
+        # Python still holds buffered stdout; redirect it to devnull so the
+        # interpreter's exit-time flush doesn't raise a second BrokenPipeError.
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        os.close(devnull)
+        return EXIT_OK
+
+
+def _main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if not args.path.is_file():
