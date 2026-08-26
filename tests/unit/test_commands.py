@@ -35,13 +35,12 @@ def test_optimize_command_add_arguments_registers_path_and_out():
     assert args.no_verify is False
 
 
-def test_optimize_command_run_returns_optimize_result(tmp_path: Path, synthetic_psd_tiff: Path):
+def test_optimize_command_run_returns_optimize_result(tmp_path: Path, sample_file):
     # Arrange
     parser = argparse.ArgumentParser()
     OptimizeCommand().add_arguments(parser)
-    args = parser.parse_args(
-        [str(synthetic_psd_tiff), "--out", str(tmp_path / "out.tif")]
-    )
+    source = sample_file("raw-layers")
+    args = parser.parse_args([str(source), "--out", str(tmp_path / "out.tif")])
 
     # Act
     result = OptimizeCommand().run(args)
