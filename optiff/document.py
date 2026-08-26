@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import tifffile
 
-from optiff.domain import ImageInfo, PhysicalRange
+from optiff.domain import ImageInfo, IntOrder, PhysicalRange
 from optiff.readers import FileWindowReader
 
 #: Fallback in case tifffile ever stops exposing `TiffTag.valuebytecount`.
@@ -30,6 +30,83 @@ DATATYPE_ITEMSIZE = {
     17: 8,  # SLONG8
     18: 8,  # IFD8
 }
+
+
+def _compression_info(compression: Any) -> tuple[int, str]:
+    """The numeric code and name of a page's compression tag."""
+    if compression is None:
+        return 1, "NONE"
+
+    value = compression.value if hasattr(compression, "value") else int(compression)
+    name = compression.name if hasattr(compression, "name") else str(compression)
+
+    return value, name
+
+
+def _coerce_bytes(value: Any) -> bytes | None:
+    """A tag value as `bytes`, or `None` if it cannot be coerced."""
+    if isinstance(value, bytes):
+        return value
+
+    if isinstance(value, bytearray):
+        return bytes(value)
+
+    if hasattr(value, "tobytes"):
+        return value.tobytes()
+
+    try:
+        return bytes(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_ifd_entries(
+    table: bytes,
+    entries: int,
+    entry_size: int,
+    field_size: int,
+    order: IntOrder,
+) -> list[tuple[int, int, int]]:
+    """Each IFD entry's `(dtype, count, value_offset)`, decoded from raw bytes."""
+    parsed = []
+
+    for index in range(entries):
+        entry = table[index * entry_size : (index + 1) * entry_size]
+
+        dtype = int.from_bytes(entry[2:4], order)
+        count = int.from_bytes(entry[4 : 4 + field_size], order)
+        value_offset = int.from_bytes(entry[4 + field_size : 4 + 2 * field_size], order)
+
+        parsed.append((dtype, count, value_offset))
+
+    return parsed
+
+
+def _entry_value_ranges(
+    entries: list[tuple[int, int, int]],
+    inline_limit: int,
+    file_size: int,
+) -> list[PhysicalRange]:
+    """The out-of-line value ranges among parsed IFD entries, bounds-checked."""
+    ranges = []
+
+    for dtype, count, value_offset in entries:
+        itemsize = DATATYPE_ITEMSIZE.get(dtype)
+
+        if itemsize is None:
+            continue
+
+        size = itemsize * count
+
+        if size <= inline_limit:
+            continue
+
+        if value_offset <= 0 or value_offset + size > file_size:
+            continue
+
+        ranges.append(PhysicalRange(value_offset, value_offset + size))
+
+    return ranges
 
 
 class TiffDocument:
@@ -79,18 +156,7 @@ class TiffDocument:
         if isinstance(bits, int):
             bits = (bits,)
 
-        compression = page.compression
-
-        if compression is None:
-            compression_value = 1
-            compression_name = "NONE"
-        else:
-            compression_value = (
-                compression.value if hasattr(compression, "value") else int(compression)
-            )
-            compression_name = (
-                compression.name if hasattr(compression, "name") else str(compression)
-            )
+        compression_value, compression_name = _compression_info(page.compression)
 
         predictor = page.predictor
 
@@ -124,21 +190,7 @@ class TiffDocument:
         if tag is None:
             return None
 
-        value = tag.value
-
-        if isinstance(value, bytes):
-            return value
-
-        if isinstance(value, bytearray):
-            return bytes(value)
-
-        if hasattr(value, "tobytes"):
-            return value.tobytes()
-
-        try:
-            return bytes(value)
-        except (TypeError, ValueError):
-            return None
+        return _coerce_bytes(tag.value)
 
     def tag_reader(self, number: int) -> FileWindowReader | None:
         """A reader over the tag value, reading from the file through `seek`."""
@@ -349,34 +401,12 @@ class TiffDocument:
 
             table = file.read(entries * entry_size)
 
-        ranges = [PhysicalRange(offset, offset + table_size)]
+        parsed = _parse_ifd_entries(table, entries, entry_size, field_size, order)
 
-        for index in range(entries):
-            entry = table[index * entry_size : (index + 1) * entry_size]
-
-            dtype = int.from_bytes(entry[2:4], order)
-            count = int.from_bytes(entry[4 : 4 + field_size], order)
-
-            itemsize = DATATYPE_ITEMSIZE.get(dtype)
-
-            if itemsize is None:
-                continue
-
-            size = itemsize * count
-
-            if size <= inline_limit:
-                continue
-
-            value_offset = int.from_bytes(
-                entry[4 + field_size : 4 + 2 * field_size], order
-            )
-
-            if value_offset <= 0 or value_offset + size > file_size:
-                continue
-
-            ranges.append(PhysicalRange(value_offset, value_offset + size))
-
-        return ranges
+        return [
+            PhysicalRange(offset, offset + table_size),
+            *_entry_value_ranges(parsed, inline_limit, file_size),
+        ]
 
     def photoshop_source_data(self) -> bytes | None:
         return self.raw_tag_data(self.PHOTOSHOP_IMAGE_SOURCE_DATA)

@@ -48,18 +48,45 @@ jobs:
       # invents errors that have nothing to do with the code.
       - run: pyrefly check --python-interpreter-path "$(which python)"
 
-      # The suite needs no sample files - it generates them.
-      - run: pytest --cov=optiff --cov-report=term-missing --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
+      # Three separate runs, not one, so coverage/results can be flagged by
+      # kind on Codecov. All three generate their own fixtures - none of
+      # them touches the real, multi-gigabyte sample files (see
+      # tests/conftest.py), which is why there is no fourth "bigfile" run
+      # here.
+      - name: Unit tests
+        run: pytest tests/unit -o addopts="-ra --strict-markers --strict-config" --cov=optiff --cov-report=xml:coverage-unit.xml --junitxml=junit-unit.xml -o junit_family=legacy
 
-      - uses: codecov/codecov-action@v5
+      - name: Integration + e2e tests
+        run: pytest tests/integration tests/e2e -m "not slow and not bigfile" -o addopts="-ra --strict-markers --strict-config" --cov=optiff --cov-report=xml:coverage-integration.xml --junitxml=junit-integration.xml -o junit_family=legacy
+
+      - name: Doctests
+        run: pytest optiff tests/unit/builders.py tests/sample_files.py -o addopts="--doctest-modules" --cov=optiff --cov-report=xml:coverage-doctest.xml --junitxml=junit-doctest.xml -o junit_family=legacy
+
+      - name: Upload unit coverage to Codecov
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
+          files: ./coverage-unit.xml
+          flags: unit
+
+      - name: Upload integration coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-integration.xml
+          flags: integration
+
+      - name: Upload doctest coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-doctest.xml
+          flags: doctest
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./junit.xml
+          files: ./junit-unit.xml,./junit-integration.xml,./junit-doctest.xml
           report_type: test_results
