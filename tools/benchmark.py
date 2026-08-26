@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
 import statistics
 import sys
 import time
@@ -29,9 +30,12 @@ from pathlib import Path
 
 from tests.sample_files import CONTENT_PROFILES
 
-#: Channel size realistic enough that timing signal isn't swamped by noise
-#: (the issue's own words: at 28 kB, it is).
-DEFAULT_WIDTH, DEFAULT_ROWS = 1024, 1024
+#: 8192 x 8192 x 2 bytes = 128 MB per channel raw - a real multi-layer,
+#: multi-channel file totalling ~2 GB (AFFINITY_NOTES.md's scale) is many
+#: channels this size, not one channel that size. Large enough to reproduce
+#: the level 3/4 size inversion and the level 4-5 time jump seen there;
+#: neither shows reliably at a few hundred kilobytes.
+DEFAULT_WIDTH, DEFAULT_ROWS = 8192, 8192
 
 LEVELS = range(1, 10)
 
@@ -137,8 +141,30 @@ def _scale(value: float, lo: float, hi: float, out_lo: float, out_hi: float) -> 
     return out_lo + (value - lo) / (hi - lo) * (out_hi - out_lo)
 
 
+def _format_bytes(n: float) -> str:
+    for unit, size in (("GB", 1e9), ("MB", 1e6), ("KB", 1e3)):
+        if n >= size:
+            return f"{n / size:.1f} {unit}"
+
+    return f"{n:.0f} B"
+
+
+def _format_seconds(t: float) -> str:
+    return f"{t * 1000:.0f} ms" if t < 1 else f"{t:.2f} s"
+
+
 def render_svg(results: dict[str, list[LevelResult]], *, theme: str) -> str:
-    """One SVG: time on x, size on y, one polyline per profile, levels labelled."""
+    """
+    One SVG: time on x, size on y (log scale), one polyline per profile.
+
+    Content profiles span orders of magnitude in compressed size (a `flat`
+    channel and a `grain` channel of the same pixel count can differ by
+    100x), so a linear size axis flattens every profile but the largest
+    into an invisible line hugging the bottom. Log scale is still one axis,
+    one unit - not the dual-axis trade-off this chart deliberately avoids -
+    it just lets each profile's own level-to-level movement be seen
+    regardless of its absolute size.
+    """
     colors = _PALETTE[theme]
     width, height = 720, 440
     margin = {"left": 90, "right": 24, "top": 24, "bottom": 56}
@@ -147,21 +173,38 @@ def render_svg(results: dict[str, list[LevelResult]], *, theme: str) -> str:
 
     all_points = [(r.seconds, r.size) for levels in results.values() for r in levels]
     times = [t for t, _ in all_points]
-    sizes = [s for _, s in all_points]
+    log_sizes = [math.log10(s) for _, s in all_points]
     t_lo, t_hi = min(times), max(times)
-    s_lo, s_hi = min(sizes), max(sizes)
+    s_lo, s_hi = min(log_sizes), max(log_sizes)
 
     def x(t: float) -> float:
         return margin["left"] + _scale(t, t_lo, t_hi, 0, plot_w)
 
     def y(s: float) -> float:
-        return margin["top"] + _scale(s, s_lo, s_hi, plot_h, 0)
+        return margin["top"] + _scale(math.log10(s), s_lo, s_hi, plot_h, 0)
 
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
         f'font-family="sans-serif" font-size="11">',
         f'<rect width="{width}" height="{height}" fill="{colors["background"]}"/>',
     ]
+
+    for fraction in (0, 0.25, 0.5, 0.75, 1):
+        gy = margin["top"] + fraction * plot_h
+        tick_size = 10 ** _scale(fraction, 0, 1, s_hi, s_lo)
+        parts.append(
+            f'<text x="{margin["left"] - 8}" y="{gy + 3:.1f}" fill="{colors["text"]}" '
+            f'text-anchor="end">{_format_bytes(tick_size)}</text>'
+        )
+
+    for fraction in (0, 0.25, 0.5, 0.75, 1):
+        gx = margin["left"] + fraction * plot_w
+        tick_time = _scale(fraction, 0, 1, t_lo, t_hi)
+        parts.append(
+            f'<text x="{gx:.1f}" y="{margin["top"] + plot_h + 14}" '
+            f'fill="{colors["text"]}" text-anchor="middle">'
+            f"{_format_seconds(tick_time)}</text>"
+        )
 
     for fraction in (0, 0.25, 0.5, 0.75, 1):
         gy = margin["top"] + fraction * plot_h
