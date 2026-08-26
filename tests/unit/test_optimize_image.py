@@ -240,9 +240,19 @@ def test_shift_patches_includes_out_of_line_sub_ifd_entries():
     assert (entry_at, (entry_value_offset - 10).to_bytes(4, "little")) in patches
 
 
-def test_sub_ifd_patches_rejects_an_implausible_entry_count():
+def test_sub_ifd_patches_rejects_a_zero_entry_count():
     buf = bytearray(64)
     buf[0:2] = (0).to_bytes(2, "little")  # 0 entries
+
+    with pytest.raises(ImageDataError, match="entries"):
+        optimize_image._sub_ifd_patches(
+            BytesReader(bytes(buf)), offset=0, delta=10, boundary=100, order="little"
+        )
+
+
+def test_sub_ifd_patches_rejects_an_implausibly_large_entry_count():
+    buf = bytearray(64)
+    buf[0:2] = (4096).to_bytes(2, "little")  # at the rejection threshold
 
     with pytest.raises(ImageDataError, match="entries"):
         optimize_image._sub_ifd_patches(
