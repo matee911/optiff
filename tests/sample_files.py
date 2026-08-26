@@ -23,6 +23,7 @@ import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 import numpy as np
 
@@ -36,7 +37,9 @@ from tests.unit.builders import (
     layer_section,
     layer_section_be,
     link_record_with_psb,
+    psd_block_header,
     psd_container,
+    tiff_header_and_ifd,
 )
 
 #: Canvas of the generated files. Small enough that a whole case builds in
@@ -57,6 +60,28 @@ SECTION_DIVIDER = "lsct"
 GROUP_OPEN, GROUP_END = 1, 3
 
 
+def _walk_chunk(rng: np.random.Generator, width: int, n_rows: int) -> bytes:
+    """
+    `n_rows` rows of the random walk, drawn from `rng`.
+
+    Calling this repeatedly with the same `rng` and summing `n_rows` across
+    calls gives the exact same bytes as one call with the total row count -
+    `axis=1` cumsum resets every row, so rows never depend on each other, only
+    on where the shared `rng` stream already is. That is what lets a large
+    channel stream to disk in chunks instead of building in one array.
+
+    >>> import numpy as np
+    >>> whole = _walk_chunk(np.random.default_rng(1), 8, 6)
+    >>> rng = np.random.default_rng(1)
+    >>> chunked = _walk_chunk(rng, 8, 2) + _walk_chunk(rng, 8, 4)
+    >>> whole == chunked
+    True
+    """
+    walk = np.cumsum(rng.integers(-4, 5, size=(n_rows, width)), axis=1)
+
+    return (walk % 65536).astype(">u2").tobytes()
+
+
 def smooth(seed: int) -> bytes:
     """
     16-bit pixels with the local continuity real photographic layers have.
@@ -71,10 +96,7 @@ def smooth(seed: int) -> bytes:
     >>> smooth(1) == smooth(2)
     False
     """
-    rng = np.random.default_rng(seed)
-    walk = np.cumsum(rng.integers(-4, 5, size=(ROWS, WIDTH)), axis=1)
-
-    return (walk % 65536).astype(">u2").tobytes()
+    return _walk_chunk(np.random.default_rng(seed), WIDTH, ROWS)
 
 
 def packbits(data: bytes) -> bytes:
@@ -433,12 +455,228 @@ def build(name: str) -> bytes:
     return CASES[name].build()
 
 
-def write(name: str, directory: Path) -> Path:
-    """Writes one case into `directory` and returns its path."""
-    path = directory / f"{name}.tif"
-    path.write_bytes(build(name))
+# ============================================================================
+# STREAMING A LARGE FILE (--scale)
+# ============================================================================
+
+#: Cases whose channels are RAW - no RLE table, no zlib - so every byte
+#: length is known before a single pixel is generated. Only these can stream
+#: to disk instead of building fully in memory; scaling any other case would
+#: need seek-based patching this file doesn't implement.
+SCALABLE_CASES = frozenset({"raw-layers"})
+
+#: Refuse to write a file past this many bytes without --yes.
+SIZE_WARN_BYTES = 500_000_000
+
+#: Rows generated per write() call to the file, bounding peak memory use.
+CHUNK_ROWS = 8_192
+
+
+@dataclass(frozen=True)
+class _ScaledLayout:
+    """Every length and header byte needed to stream a scaled raw-layers file."""
+
+    rows: int
+    channel_len: int
+    image_len: int
+    section_bytes: bytes
+    block_header: bytes
+    padding: int
+    photoshop_len: int
+    head: bytes
+
+    @property
+    def total(self) -> int:
+        return len(self.head) + self.image_len + self.photoshop_len
+
+
+def _scaled_layout(scale: int) -> _ScaledLayout:
+    """
+    The layout of a "raw-layers" file whose row count is `ROWS * scale`.
+
+    Always framed as a "V0002" container with 8-byte channel/block lengths
+    (the layout `large-document-container` already exercises), so nothing
+    here needs to branch once a channel crosses a 4-byte length field.
+    """
+    rows = ROWS * scale
+    channel_len = HEADER + WIDTH * rows * BPP
+    image_len = WIDTH * rows * 3 * (16 // 8)
+
+    record = layer_record(
+        name="Background",
+        bounds=(0, 0, rows, WIDTH),
+        channels=((0, channel_len), (1, channel_len), (2, channel_len)),
+        large=True,
+    )
+    section_bytes = layer_section(record)
+    content_len = len(section_bytes) + 3 * channel_len
+    padding = (-content_len) % 4
+    block_header = psd_block_header("Lr16", content_len, length_size=8)
+    photoshop_len = len(CONTAINER_V0002) + len(block_header) + content_len + padding
+
+    head = tiff_header_and_ifd(
+        width=WIDTH,
+        height=rows,
+        photoshop_last=True,
+        image_len=image_len,
+        photoshop_len=photoshop_len,
+        compression=1,
+    )
+
+    return _ScaledLayout(
+        rows=rows,
+        channel_len=channel_len,
+        image_len=image_len,
+        section_bytes=section_bytes,
+        block_header=block_header,
+        padding=padding,
+        photoshop_len=photoshop_len,
+        head=head,
+    )
+
+
+def estimated_scaled_size(scale: int) -> int:
+    """
+    The exact byte count a `--scale scale` "raw-layers" file will have.
+
+    >>> estimated_scaled_size(2) > estimated_scaled_size(1)
+    True
+    """
+    return _scaled_layout(scale).total
+
+
+def scale_to_cross(tag_37724_bytes: int) -> int:
+    """
+    The smallest `--scale` whose tag 37724 (the "Lr16" PSD blob) exceeds
+    `tag_37724_bytes` - the quantity AFFINITY_NOTES.md measures against 2^31.
+
+    >>> layout = _scaled_layout(scale_to_cross(2**31))
+    >>> layout.photoshop_len > 2**31
+    True
+    >>> _scaled_layout(scale_to_cross(2**31) - 1).photoshop_len <= 2**31
+    True
+    """
+    scale = 1
+
+    while _scaled_layout(scale).photoshop_len <= tag_37724_bytes:
+        scale *= 2
+
+    lo, hi = scale // 2, scale
+
+    while lo < hi:
+        mid = (lo + hi) // 2
+
+        if _scaled_layout(mid).photoshop_len <= tag_37724_bytes:
+            lo = mid + 1
+        else:
+            hi = mid
+
+    return lo
+
+
+def _write_zeros(
+    handle: BinaryIO, n: int, written: int, progress: Callable[[int], None]
+) -> int:
+    """Streams `n` zero bytes - the base TIFF image strip nobody reads."""
+    chunk_size = CHUNK_ROWS * WIDTH * BPP * 3
+    zeros = bytes(min(chunk_size, n))
+    remaining = n
+
+    while remaining > 0:
+        block = zeros[: min(chunk_size, remaining)]
+        handle.write(block)
+        remaining -= len(block)
+        written += len(block)
+        progress(written)
+
+    return written
+
+
+def _write_channel(
+    handle: BinaryIO,
+    seed: int,
+    rows: int,
+    written: int,
+    progress: Callable[[int], None],
+) -> int:
+    """Streams one RAW channel's pixels, `CHUNK_ROWS` rows at a time."""
+    rng = np.random.default_rng(seed)
+    remaining = rows
+
+    while remaining > 0:
+        n = min(CHUNK_ROWS, remaining)
+        handle.write(_walk_chunk(rng, WIDTH, n))
+        remaining -= n
+        written += n * WIDTH * BPP
+        progress(written)
+
+    return written
+
+
+def _progress_reporter(total: int) -> Callable[[int], None]:
+    """A `progress(written)` callback, printed once per whole percent."""
+    last_percent = -1
+
+    def progress(written: int) -> None:
+        nonlocal last_percent
+
+        if total <= SIZE_WARN_BYTES:
+            return
+
+        percent = written * 100 // total
+
+        if percent == last_percent:
+            return
+
+        last_percent = percent
+        end = "\n" if written >= total else ""
+        print(f"\r{percent:3d}% ({written:,} / {total:,} B)", end=end, file=sys.stderr)
+
+    return progress
+
+
+def write_scaled_raw_layers(path: Path, *, scale: int) -> Path:
+    """Streams a scaled "raw-layers" case to `path` without holding it in RAM."""
+    layout = _scaled_layout(scale)
+    progress = _progress_reporter(layout.total)
+    written = 0
+
+    with path.open("wb") as handle:
+        handle.write(layout.head)
+        written += len(layout.head)
+        written = _write_zeros(handle, layout.image_len, written, progress)
+
+        handle.write(CONTAINER_V0002)
+        handle.write(layout.block_header)
+        handle.write(layout.section_bytes)
+        written += (
+            len(CONTAINER_V0002) + len(layout.block_header) + len(layout.section_bytes)
+        )
+
+        for seed in (1, 2, 3):
+            handle.write(RAW.to_bytes(HEADER, "little"))
+            written += HEADER
+            written = _write_channel(handle, seed, layout.rows, written, progress)
+
+        handle.write(b"\x00" * layout.padding)
 
     return path
+
+
+def write(name: str, directory: Path, *, scale: int = 1) -> Path:
+    """Writes one case into `directory` and returns its path."""
+    path = directory / f"{name}.tif"
+
+    if scale == 1:
+        path.write_bytes(build(name))
+        return path
+
+    if name not in SCALABLE_CASES:
+        raise ValueError(
+            f"{name!r} cannot be scaled; only {sorted(SCALABLE_CASES)} can"
+        )
+
+    return write_scaled_raw_layers(path, scale=scale)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -453,12 +691,44 @@ def main(argv: list[str] | None = None) -> int:
         choices=sorted(CASES),
         help="write only the named case; may be repeated",
     )
+    parser.add_argument(
+        "--scale",
+        type=int,
+        default=1,
+        help=(
+            "multiply raw-layers' row count by this factor and stream it to "
+            f"disk instead of building in memory; only {sorted(SCALABLE_CASES)} "
+            "support this"
+        ),
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help=f"required to write an estimated size past {SIZE_WARN_BYTES:,} B",
+    )
 
     args = parser.parse_args(argv)
     args.directory.mkdir(parents=True, exist_ok=True)
 
+    if args.scale != 1:
+        names = args.only or []
+
+        if not names or any(name not in SCALABLE_CASES for name in names):
+            parser.error(
+                f"--scale requires --only naming one of {sorted(SCALABLE_CASES)}"
+            )
+
+        size = estimated_scaled_size(args.scale)
+        print(f"estimated size: {size:,} B")
+
+        if size > SIZE_WARN_BYTES and not args.yes:
+            parser.error(
+                f"refusing to write {size:,} B without --yes "
+                f"(threshold {SIZE_WARN_BYTES:,} B)"
+            )
+
     for name in args.only or sorted(CASES):
-        path = write(name, args.directory)
+        path = write(name, args.directory, scale=args.scale)
 
         print(f"{path.name:<30}{path.stat().st_size:>10,} B  {CASES[name].summary}")
 

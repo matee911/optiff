@@ -8,6 +8,7 @@ import pytest
 
 from optiff.document import TiffDocument
 from optiff.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
+from tests.sample_files import scale_to_cross, write
 
 #: Verified block layout of the small sample file.
 TEST1_KEYS = ["Lr16", "LMsk", "Pat2", "CAI ", "GenI", "FMsk", "cinf"]
@@ -253,3 +254,22 @@ def test_every_production_tiff_walks_cleanly(tiff_dir: Path):
     # Assert
     assert not problems, "\n".join(problems)
     assert len(paths) >= 2
+
+
+@pytest.mark.bigfile
+def test_generated_file_past_2_31_parses_cleanly(tmp_path: Path):
+    # Arrange - block layout, zero warnings and an offset past 2^31 don't
+    # need a real client file, only a large one; `--scale` generates it,
+    # so this needs no `samples.local.json`.
+    scale = scale_to_cross(2**31)
+    path = write("raw-layers", tmp_path, scale=scale)
+
+    with TiffDocument(path) as document:
+        # Act
+        result = TiffPhotoshopAnalyzer().analyze(document)
+
+    # Assert
+    assert [block.key for block in result.blocks] == ["Lr16"]
+    assert result.blocks[-1].end == result.data_size
+    assert result.warnings == ()
+    assert result.blocks[0].end > 2**31

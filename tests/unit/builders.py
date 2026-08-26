@@ -46,6 +46,40 @@ def psd_block(  # noqa: PLR0913  - test builder, one knob per variant
     >>> len(psd_block("Lr16", b"ab", length_size=8))
     20
     """
+    length = len(payload) if declared_length is None else declared_length
+    padding = (-len(payload)) % 4
+
+    return (
+        psd_block_header(
+            key,
+            length,
+            byte_order=byte_order,
+            signature=signature,
+            length_size=length_size,
+        )
+        + payload
+        + b"\x00" * padding
+    )
+
+
+def psd_block_header(
+    key: str,
+    length: int,
+    *,
+    byte_order: str = "<",
+    signature: str = "8BIM",
+    length_size: int | None = None,
+) -> bytes:
+    """
+    The signature+key+length prefix of a block, without its payload.
+
+    Split out of `psd_block` so a streaming writer - one whose payload is too
+    large to hold in memory - can still get a correct block header from a
+    length alone.
+
+    >>> psd_block_header("Lr16", 2, byte_order=">")
+    b'8BIMLr16\\x00\\x00\\x00\\x02'
+    """
     if len(key) != 4:
         raise ValueError(f"The key must be 4 characters, got {key!r}")
 
@@ -53,16 +87,10 @@ def psd_block(  # noqa: PLR0913  - test builder, one knob per variant
         length_size = 8 if signature == "8B64" else 4
     order = "little" if byte_order == "<" else "big"
 
-    length = len(payload) if declared_length is None else declared_length
-
-    padding = (-len(payload)) % 4
-
     return (
         _swap(signature.encode("latin1"), byte_order)
         + _swap(key.encode("latin1"), byte_order)
         + length.to_bytes(length_size, order)
-        + payload
-        + b"\x00" * padding
     )
 
 
@@ -232,6 +260,70 @@ def _entry(code: int, dtype: int, count: int, value: int) -> bytes:
     )
 
 
+def tiff_header_and_ifd(  # noqa: PLR0913  - a test builder, one knob per variant
+    *,
+    width: int,
+    height: int,
+    photoshop_last: bool,
+    image_len: int,
+    photoshop_len: int,
+    compression: int,
+) -> bytes:
+    """
+    Everything in a classic little-endian TIFF before the image/photoshop tail.
+
+    Split out of `build_tiff` so a streaming writer - one that cannot
+    materialise the (possibly gigabytes-large) tail in memory - can still get
+    a correct header and IFD from lengths alone.
+
+    >>> tiff_header_and_ifd(
+    ...     width=8, height=4, photoshop_last=True,
+    ...     image_len=192, photoshop_len=16, compression=1,
+    ... )[:4]
+    b'II*\\x00'
+    """
+    samples, bits = 3, 16
+
+    codes = [256, 257, 258, 259, 262, 273, 277, 278, 279, 37724]
+
+    ifd_at = 8
+    ifd_size = 2 + len(codes) * IFD_ENTRY + 4
+    values_at = ifd_at + ifd_size
+
+    bits_at = values_at
+    after_bits = bits_at + samples * 2
+
+    if photoshop_last:
+        image_at = after_bits
+        photoshop_at = image_at + image_len
+    else:
+        photoshop_at = after_bits
+        image_at = photoshop_at + photoshop_len
+
+    entries = b"".join(
+        [
+            _entry(256, SHORT, 1, width),
+            _entry(257, SHORT, 1, height),
+            _entry(258, SHORT, samples, bits_at),
+            _entry(259, SHORT, 1, compression),
+            _entry(262, SHORT, 1, 2),  # RGB
+            _entry(273, LONG, 1, image_at),
+            _entry(277, SHORT, 1, samples),
+            _entry(278, LONG, 1, height),
+            _entry(279, LONG, 1, image_len),
+            _entry(37724, UNDEFINED, photoshop_len, photoshop_at),
+        ]
+    )
+
+    ifd = len(codes).to_bytes(2, "little") + entries + (0).to_bytes(4, "little")
+
+    header = b"II" + (42).to_bytes(2, "little") + ifd_at.to_bytes(4, "little")
+
+    body = b"".join(bits.to_bytes(2, "little") for _ in range(samples))
+
+    return header + ifd + body
+
+
 def build_tiff(  # noqa: PLR0913  - a test builder, one knob per variant
     photoshop: bytes,
     *,
@@ -264,48 +356,18 @@ def build_tiff(  # noqa: PLR0913  - a test builder, one knob per variant
     if compression == 1 and len(image) != expected:
         raise ValueError(f"the image has {len(image)} B, expected {expected}")
 
-    codes = [256, 257, 258, 259, 262, 273, 277, 278, 279, 37724]
-
-    ifd_at = 8
-    ifd_size = 2 + len(codes) * IFD_ENTRY + 4
-    values_at = ifd_at + ifd_size
-
-    bits_at = values_at
-    after_bits = bits_at + samples * 2
-
-    if photoshop_last:
-        image_at = after_bits
-        photoshop_at = image_at + len(image)
-    else:
-        photoshop_at = after_bits
-        image_at = photoshop_at + len(photoshop)
-
-    entries = b"".join(
-        [
-            _entry(256, SHORT, 1, width),
-            _entry(257, SHORT, 1, height),
-            _entry(258, SHORT, samples, bits_at),
-            _entry(259, SHORT, 1, compression),
-            _entry(262, SHORT, 1, 2),  # RGB
-            _entry(273, LONG, 1, image_at),
-            _entry(277, SHORT, 1, samples),
-            _entry(278, LONG, 1, height),
-            _entry(279, LONG, 1, len(image)),
-            _entry(37724, UNDEFINED, len(photoshop), photoshop_at),
-        ]
-    )
-
-    ifd = len(codes).to_bytes(2, "little") + entries + (0).to_bytes(4, "little")
-
-    body = bytes([bits] * 0) + b"".join(
-        bits.to_bytes(2, "little") for _ in range(samples)
+    head = tiff_header_and_ifd(
+        width=width,
+        height=height,
+        photoshop_last=photoshop_last,
+        image_len=len(image),
+        photoshop_len=len(photoshop),
+        compression=compression,
     )
 
     tail = image + photoshop if photoshop_last else photoshop + image
 
-    header = b"II" + (42).to_bytes(2, "little") + ifd_at.to_bytes(4, "little")
-
-    return header + ifd + body + tail
+    return head + tail
 
 
 def psb_file(layers: bytes, *, width: int = 8, height: int = 4) -> bytes:
