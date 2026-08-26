@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from optiff.psd_layers import Layer, parse_layers
+from optiff.readers import BytesReader
 from tests.unit.builders import (
     layer_extra_block,
     layer_record,
     layer_section,
 )
-from tiff_analyzer.psd_layers import Layer, parse_layers
-from tiff_analyzer.readers import BytesReader
 
 
 def parse(data: bytes, *, large: bool = False):

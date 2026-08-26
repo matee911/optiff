@@ -6,13 +6,13 @@ from itertools import pairwise
 
 import pytest
 
-from tiff_analyzer.psd_file import (
+from optiff.psd_file import (
     HEADER_SIZE,
     DocumentError,
     FileSection,
     parse_document,
 )
-from tiff_analyzer.readers import BytesReader
+from optiff.readers import BytesReader
 
 
 def be(value: int, width: int) -> bytes:

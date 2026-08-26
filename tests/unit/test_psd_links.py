@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from tiff_analyzer.psd_links import parse_links
-from tiff_analyzer.readers import BytesReader
+from optiff.psd_links import parse_links
+from optiff.readers import BytesReader
 
 
 def unicode_string(value: str) -> bytes:

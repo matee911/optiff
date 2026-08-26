@@ -6,8 +6,8 @@ import os
 
 import pytest
 
-from tiff_analyzer.domain import PhysicalRange
-from tiff_analyzer.storage import PhysicalClassifier, gaps, merge_ranges
+from optiff.domain import PhysicalRange
+from optiff.storage import PhysicalClassifier, gaps, merge_ranges
 
 
 def ranges(*pairs: tuple[int, int]) -> list[PhysicalRange]:

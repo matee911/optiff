@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from tiff_analyzer.psd_descriptor import (
+from optiff.psd_descriptor import (
     Descriptor,
     DescriptorError,
     parse,

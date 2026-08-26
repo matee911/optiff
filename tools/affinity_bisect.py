@@ -26,9 +26,9 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-import tiff_analyzer.optimize_layers as ol
-from tiff_analyzer.optimize import channel_digests_of, optimize, plan_file
-from tiff_analyzer.segments import Copy
+import optiff.optimize_layers as ol
+from optiff.optimize import channel_digests_of, optimize, plan_file
+from optiff.segments import Copy
 
 GB = 1024**3
 

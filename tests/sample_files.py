@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
+from optiff.psd_codec import RAW, RLE, ZIP, ZIP_PREDICTED, ChannelGeometry
 from tests.unit.builders import (
     CONTAINER_V0002,
     build_tiff,
@@ -37,7 +38,6 @@ from tests.unit.builders import (
     link_record_with_psb,
     psd_container,
 )
-from tiff_analyzer.psd_codec import RAW, RLE, ZIP, ZIP_PREDICTED, ChannelGeometry
 
 #: Canvas of the generated files. Small enough that a whole case builds in
 #: milliseconds, large enough that compression has something to bite on.

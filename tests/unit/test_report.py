@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from tiff_analyzer.domain import DataBlock, ImageInfo, PhysicalRange
-from tiff_analyzer.report import render_size_tree
+from optiff.domain import DataBlock, ImageInfo, PhysicalRange
+from optiff.report import render_size_tree
 
 IMAGE_INFO = ImageInfo(
     width=100,

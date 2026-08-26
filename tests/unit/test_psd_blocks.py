@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from optiff.psd_blocks import align4, detect_layout, logical_key, walk
+from optiff.readers import BytesReader
 from tests.unit.builders import psd_block, psd_stream
-from tiff_analyzer.psd_blocks import align4, detect_layout, logical_key, walk
-from tiff_analyzer.readers import BytesReader
 
 BYTE_ORDERS = ["<", ">"]
 

@@ -11,17 +11,17 @@ import hashlib
 import numpy as np
 import pytest
 
-from tests.unit.builders import layer_record, layer_section
-from tiff_analyzer.optimize_layers import HEADER, plan_layer_section
-from tiff_analyzer.psd_codec import (
+from optiff.optimize_layers import HEADER, plan_layer_section
+from optiff.psd_codec import (
     RAW,
     ZIP_PREDICTED,
     ChannelGeometry,
     decode_channel,
 )
-from tiff_analyzer.psd_layers import parse_layers
-from tiff_analyzer.readers import BytesReader
-from tiff_analyzer.segments import materialise, total_size
+from optiff.psd_layers import parse_layers
+from optiff.readers import BytesReader
+from optiff.segments import materialise, total_size
+from tests.unit.builders import layer_record, layer_section
 
 WIDTH, ROWS = 64, 16
 PIXEL_BYTES = WIDTH * ROWS * 2

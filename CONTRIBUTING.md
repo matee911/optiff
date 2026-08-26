@@ -25,6 +25,36 @@ If you hit a file this tool gets wrong, the most useful thing you can send is
 **a new case in that catalogue** reproducing the shape of the problem, not the
 file itself.
 
+## Branching
+
+History on `main` is linear. No merge commits, ever.
+
+```bash
+git switch -c what-it-does
+# ... work ...
+git fetch origin
+git rebase origin/main
+git push --force-with-lease
+```
+
+Rebase onto `main` rather than merging it in, and use `--force-with-lease`
+rather than `--force`: it refuses to overwrite work that arrived while you
+were not looking.
+
+The repository is configured for this on both sides. Merge commits are turned
+off on GitHub, so a pull request can only be rebased or squashed, and the
+local settings below are already applied in a fresh clone if you copy them:
+
+```bash
+git config pull.rebase true       # pull replays your work, never merges
+git config merge.ff only          # a merge that is not a fast-forward fails
+git config rebase.autoStash true
+```
+
+Why: a linear history means `git log` reads as the order things actually
+happened, `git bisect` has one path to walk, and any commit can be reverted
+without untangling a merge.
+
 ## Rules the code follows
 
 - **The original is never modified.** Results are written alongside, under a new
@@ -42,7 +72,7 @@ By submitting a contribution you agree to the following.
 
 ### 1. Definitions
 
-"The project owner" means matee911, the copyright holder of this project.
+"The project owner" means Mateusz Pawlik, the copyright holder of this project.
 "You" means the copyright owner, or the person legally authorised by the
 copyright owner, who is entering this agreement. "Contribution" means any work
 of authorship you deliberately submit to this project, in any form and through

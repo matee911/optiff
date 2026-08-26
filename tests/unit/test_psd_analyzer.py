@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from optiff.psd_analyzer import ImageSourceDataAnalyzer
+from optiff.psd_blocks import walk
+from optiff.readers import BytesReader
 from tests.unit.builders import CONTAINER_HEADER, CONTAINER_SIGNATURE, psd_container
-from tiff_analyzer.psd_analyzer import ImageSourceDataAnalyzer
-from tiff_analyzer.psd_blocks import walk
-from tiff_analyzer.readers import BytesReader
 
 
 @pytest.fixture

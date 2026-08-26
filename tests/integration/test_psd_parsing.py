@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
+from optiff.document import TiffDocument
+from optiff.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
 
 #: Verified block layout of the small sample file.
 TEST1_KEYS = ["Lr16", "LMsk", "Pat2", "CAI ", "GenI", "FMsk", "cinf"]

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.storage import PhysicalClassifier, PhysicalStorageAnalyzer
+from optiff.document import TiffDocument
+from optiff.storage import PhysicalClassifier, PhysicalStorageAnalyzer
 
 #: How many bytes may stay unaccounted: IFD padding and the file tail.
 MAX_UNACCOUNTED = 64

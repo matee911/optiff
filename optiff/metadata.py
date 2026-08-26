@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.units import format_size
+from optiff.document import TiffDocument
+from optiff.units import format_size
 
 
 class MetadataAnalyzer:

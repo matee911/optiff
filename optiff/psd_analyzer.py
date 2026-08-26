@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.domain import (
+from optiff.document import TiffDocument
+from optiff.domain import (
     ParseWarning,
     PhotoshopAnalysis,
     PhotoshopBlock,
 )
-from tiff_analyzer.psd_blocks import walk
-from tiff_analyzer.readers import ByteReader, BytesReader
-from tiff_analyzer.units import calculate_entropy
+from optiff.psd_blocks import walk
+from optiff.readers import ByteReader, BytesReader
+from optiff.units import calculate_entropy
 
 #: Container signatures Photoshop puts in front of the block stream.
 #: Both are 35 bytes long.
@@ -123,8 +123,8 @@ class ImageSourceDataAnalyzer:
 
         Each entry is `(key, count, total payload size)`.
 
-        >>> from tiff_analyzer.readers import BytesReader
-        >>> from tiff_analyzer.psd_blocks import walk
+        >>> from optiff.readers import BytesReader
+        >>> from optiff.psd_blocks import walk
         >>> def block(key, size):
         ...     return (
         ...         b"MIB8" + key[::-1].encode()
@@ -158,8 +158,8 @@ class ImageSourceDataAnalyzer:
         `limit` guards against gigabyte allocations: the `lnk2` block in
         produkcyjnych ma ponad 2 GB.
 
-        >>> from tiff_analyzer.readers import BytesReader
-        >>> from tiff_analyzer.psd_blocks import walk
+        >>> from optiff.readers import BytesReader
+        >>> from optiff.psd_blocks import walk
         >>> data = (
         ...     b"MIB8" + b"61rL" + (5).to_bytes(4, "little")
         ...     + b"hello" + b"\\x00" * 3

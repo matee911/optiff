@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tiff_analyzer.cli import __version__, analyze
-from tiff_analyzer.document import TiffDocument
+from optiff.cli import __version__, analyze
+from optiff.document import TiffDocument
 
 __all__ = ["TiffDocument", "__version__", "analyze"]
