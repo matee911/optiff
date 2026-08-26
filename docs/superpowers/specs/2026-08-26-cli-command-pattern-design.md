@@ -137,19 +137,13 @@ class TagInfo:
 
 @dataclass(frozen=True)
 class EmbeddedDocumentSection:
-    # one linked smart object's embedded PSD/PSB, recursively
+    # one linked smart object's embedded PSD/PSB, recursively.
+    # `EmbeddedDocument` (psd_file.py) already carries width/height/channels/
+    # depth/color_mode_name/compression_name/sections/layers/warnings as
+    # properties - wrap it rather than re-declaring those fields here.
     name: str
-    error: str | None            # DocumentError message, if parse_document failed
-    format_name: str | None
-    width: int | None
-    height: int | None
-    channels: int | None
-    depth: int | None
-    color_mode_name: str | None
-    compression_name: str | None
-    sections: tuple[SectionInfo, ...]
-    warnings: tuple[ParseWarning, ...]
-    layers: LayerStack | None
+    error: str | None       # DocumentError message, if parse_document failed
+    document: EmbeddedDocument | None   # None when error is set
 
 @dataclass(frozen=True)
 class LinkedFilesSection:
