@@ -54,7 +54,7 @@ def section(output: str, name: str) -> list[str]:
 
 def test_exits_cleanly_on_valid_tiff(synthetic_psd_tiff: Path):
     # Act
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Assert
     assert result.returncode == 0
@@ -64,7 +64,7 @@ def test_exits_cleanly_on_valid_tiff(synthetic_psd_tiff: Path):
 
 def test_prints_all_sections_in_order(synthetic_psd_tiff: Path):
     # Act
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Assert
     positions = [result.stdout.index(name) for name in SECTIONS]
@@ -73,7 +73,7 @@ def test_prints_all_sections_in_order(synthetic_psd_tiff: Path):
 
 def test_missing_file_fails_without_traceback(tmp_path: Path):
     # Act
-    result = run(str(tmp_path / "no-such-file.tif"))
+    result = run("analyze", str(tmp_path / "no-such-file.tif"))
 
     # Assert
     assert result.returncode != 0
@@ -88,7 +88,7 @@ def test_non_tiff_fails_without_traceback(tmp_path: Path):
     path.write_bytes(b"not a tiff at all" * 20)
 
     # Act
-    result = run(str(path))
+    result = run("analyze", str(path))
 
     # Assert
     assert result.returncode != 0
@@ -106,7 +106,7 @@ def test_version_flag():
 
 def test_main_is_callable_in_process(synthetic_psd_tiff: Path, capsys):
     # Act
-    code = main([str(synthetic_psd_tiff)])
+    code = main(["analyze", str(synthetic_psd_tiff)])
     captured = capsys.readouterr()
 
     # Assert
@@ -122,7 +122,7 @@ def test_main_is_callable_in_process(synthetic_psd_tiff: Path, capsys):
 
 def test_size_tree_glyphs_are_consistent(synthetic_psd_tiff: Path):
     # Arrange - regresja Bug 6
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Act
     body = [line for line in section(result.stdout, "SIZE TREE") if line.strip()]
@@ -138,7 +138,7 @@ def test_size_tree_glyphs_are_consistent(synthetic_psd_tiff: Path):
 
 def test_metadata_sizes_are_not_zero(synthetic_psd_tiff: Path):
     # Arrange - regresja Bug 9
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Act
     body = section(result.stdout, "EMBEDDED METADATA / CONTENT")
@@ -150,7 +150,7 @@ def test_metadata_sizes_are_not_zero(synthetic_psd_tiff: Path):
 
 def test_percentages_do_not_exceed_one_hundred(synthetic_psd_tiff: Path):
     # Act
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
 
     # Assert
     percentages = [
@@ -165,7 +165,7 @@ def test_percentages_do_not_exceed_one_hundred(synthetic_psd_tiff: Path):
 
 def test_photoshop_blocks_are_listed(synthetic_psd_tiff: Path):
     # Act
-    result = run(str(synthetic_psd_tiff))
+    result = run("analyze", str(synthetic_psd_tiff))
     body = "\n".join(section(result.stdout, "PHOTOSHOP IMAGESOURCEDATA"))
 
     # Assert - logical keys and resolved descriptions (Bug 4 regression)
@@ -176,7 +176,7 @@ def test_photoshop_blocks_are_listed(synthetic_psd_tiff: Path):
 
 def test_tiff_without_photoshop_reports_not_detected(synthetic_tiff: Path):
     # Act
-    result = run(str(synthetic_tiff))
+    result = run("analyze", str(synthetic_tiff))
 
     # Assert
     assert result.returncode == 0
@@ -186,7 +186,7 @@ def test_tiff_without_photoshop_reports_not_detected(synthetic_tiff: Path):
 @pytest.mark.slow
 def test_report_on_real_file(sample_tiff: Path):
     # Act
-    result = run(str(sample_tiff))
+    result = run("analyze", str(sample_tiff))
 
     # Assert
     assert result.returncode == 0

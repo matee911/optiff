@@ -10,7 +10,7 @@ from pathlib import Path
 import tifffile
 
 from optiff.document import TiffDocument
-from optiff.optimize import OptimizeError, OptimizeResult, optimize
+from optiff.optimize import OptimizeError, OptimizeResult
 from optiff.psd_analyzer import TiffPhotoshopAnalyzer
 from optiff.report import WIDTH, Reporter
 from optiff.units import format_size
@@ -151,59 +151,18 @@ def print_optimize(result: OptimizeResult) -> int:
     return EXIT_OK
 
 
+from optiff.commands.analyze import (  # noqa: E402  - after analyze(), which it imports back
+    AnalyzeCommand,
+)
+from optiff.commands.optimize import OptimizeCommand  # noqa: E402
+
+COMMANDS: tuple[object, ...] = (AnalyzeCommand(), OptimizeCommand())
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="optiff",
         description="Analyses the physical byte layout of a TIFF and its metadata.",
-    )
-
-    parser.add_argument("path", type=Path)
-
-    parser.add_argument(
-        "--optimize",
-        metavar="FILE",
-        type=Path,
-        help=(
-            "write an optimized copy to the given path; the original is left untouched"
-        ),
-    )
-
-    parser.add_argument(
-        "--level",
-        type=int,
-        default=4,
-        choices=range(1, 10),
-        metavar="1-9",
-        help="deflate level (default 4)",
-    )
-
-    parser.add_argument(
-        "--image-data",
-        action="store_true",
-        help=(
-            "also pack the flattened pixels (Adobe Deflate, no predictor); "
-            "off by default, because that is the only part Capture One and "
-            "Affinity read, and reaching the pixels gets slower"
-        ),
-    )
-
-    parser.add_argument(
-        "--zip-fallback",
-        action="store_true",
-        help=(
-            "also pack channels with no readable geometry using plain ZIP "
-            "(adjustment layer masks carry a 0x0 rectangle); off by default, "
-            "because writing method 2 is not yet widely verified"
-        ),
-    )
-
-    parser.add_argument(
-        "--no-verify",
-        action="store_true",
-        help=(
-            "skip the per-channel SHA256 comparison after writing "
-            "(faster, but with no proof of losslessness)"
-        ),
     )
 
     parser.add_argument(
@@ -211,6 +170,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {__version__}",
     )
+
+    subparsers = parser.add_subparsers(dest="command_name", required=True)
+
+    for command in COMMANDS:
+        subparser = subparsers.add_parser(command.name)
+        command.add_arguments(subparser)
+        subparser.set_defaults(command=command)
 
     return parser
 
@@ -223,25 +189,16 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_BAD_FILE
 
     try:
-        if args.optimize is not None:
-            return print_optimize(
-                optimize(
-                    args.path,
-                    args.optimize,
-                    level=args.level,
-                    verify=not args.no_verify,
-                    image_data=args.image_data,
-                    zip_fallback=args.zip_fallback,
-                )
-            )
-
-        analyze(args.path)
+        result = args.command.run(args)
     except tifffile.TiffFileError as error:
         print(f"Not a readable TIFF: {args.path} ({error})", file=sys.stderr)
         return EXIT_BAD_FILE
     except OptimizeError as error:
         print(f"Cannot optimize: {error}", file=sys.stderr)
         return EXIT_BAD_FILE
+
+    if isinstance(result, OptimizeResult):
+        return print_optimize(result)
 
     return EXIT_OK
 
