@@ -108,15 +108,11 @@ def grain_inversion(results: list[LevelResult]) -> str:
     """
     by_level = {r.level: r for r in results}
     three, four = by_level[3], by_level[4]
-
-    if four.size > three.size:
-        return (
-            f"reproduced: level 4 is larger than level 3 on grain "
-            f"({four.size:,} B > {three.size:,} B)"
-        )
+    verdict = "reproduced" if four.size > three.size else "not reproduced"
+    comparison = "is larger than" if four.size > three.size else "is not larger than"
 
     return (
-        f"not reproduced: level 4 ({four.size:,} B) is not larger than "
+        f"{verdict}: level 4 ({four.size:,} B) {comparison} "
         f"level 3 ({three.size:,} B) on grain"
     )
 
@@ -186,9 +182,6 @@ def render_svg(results: dict[str, list[LevelResult]], *, theme: str) -> str:
         "compressed size (bytes)</text>"
     )
 
-    legend_x = width - margin["right"]
-    legend_y = margin["top"]
-
     for name, levels in results.items():
         color = colors[name]
         points = " ".join(f"{x(r.seconds):.1f},{y(r.size):.1f}" for r in levels)
@@ -205,14 +198,20 @@ def render_svg(results: dict[str, list[LevelResult]], *, theme: str) -> str:
                 f'font-size="9">{r.level}</text>'
             )
 
+    legend_x = width - margin["right"]
+    # Sized to `results`, not a constant that only happened to fit 5 rows.
+    row_height = min(16, plot_h / len(results))
+
+    for i, name in enumerate(results):
+        legend_y = margin["top"] + i * row_height
         parts.append(
-            f'<circle cx="{legend_x - 96}" cy="{legend_y + 4}" r="4" fill="{color}"/>'
+            f'<circle cx="{legend_x - 96}" cy="{legend_y + 4:.1f}" r="4" '
+            f'fill="{colors[name]}"/>'
         )
         parts.append(
-            f'<text x="{legend_x - 86}" y="{legend_y + 8}" fill="{colors["text"]}">'
-            f"{name}</text>"
+            f'<text x="{legend_x - 86}" y="{legend_y + 8:.1f}" '
+            f'fill="{colors["text"]}">{name}</text>'
         )
-        legend_y += 16
 
     parts.append("</svg>")
 
