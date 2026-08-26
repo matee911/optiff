@@ -14,7 +14,7 @@ from optiff.document import TiffDocument
 from optiff.formatters.optimize import render_optimize
 from optiff.optimize import OptimizeError, OptimizeResult
 from optiff.psd_analyzer import TiffPhotoshopAnalyzer
-from optiff.report import WIDTH, Reporter
+from optiff.report import Reporter
 
 try:
     __version__ = version("optiff")
