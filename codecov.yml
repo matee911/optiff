@@ -1,0 +1,41 @@
+coverage:
+  status:
+    project:
+      default:
+        # No regressions allowed against the base commit.
+        target: auto
+        threshold: 0%
+    patch:
+      default:
+        target: 95%
+
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+        threshold: 0%
+  individual_components:
+    - component_id: core
+      name: core codec/domain
+      paths:
+        - "optiff/**"
+        - "!optiff/cli.py"
+        - "!optiff/commands/**"
+        - "!optiff/formatters/**"
+      statuses:
+        - type: project
+          target: 98%
+    - component_id: cli
+      name: CLI presentation
+      paths:
+        - "optiff/cli.py"
+        - "optiff/commands/**"
+        - "optiff/formatters/**"
+
+comment:
+  layout: "reach, diff, flags, components, files"
+
+ignore:
+  - "tests/**"
+  - "tools/**"

@@ -2,6 +2,8 @@
 
 [![codecov](https://codecov.io/github/matee911/optiff/graph/badge.svg?token=NPU5EC11CA)](https://codecov.io/github/matee911/optiff)
 
+[![codecov](https://codecov.io/github/matee911/optiff/graphs/tree.svg?token=NPU5EC11CA)](https://codecov.io/github/matee911/optiff)
+
 Lossless recompression of layered TIFF files carrying a Photoshop block,
 including the layers **inside embedded smart objects**.
 
