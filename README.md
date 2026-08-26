@@ -16,6 +16,15 @@ On a nine-file test set: **22 GB down to 10 GB (54%)**, and with
   - rectangles, blend modes, masks, names, extra blocks, the ICC profile, XMP
   - is copied byte for byte.
 
+## Install
+
+```bash
+pip install -e .
+```
+
+Python 3.13 or newer. The two dependencies, `tifffile` and `numpy`, are both
+BSD-licensed.
+
 ## Usage
 
 ```bash
@@ -90,7 +99,7 @@ file names never reach the repository.
 
 ## Licence
 
-Copyright (C) 2026 matee911
+Copyright (C) 2026 Mateusz Pawlik
 
 **GNU General Public License v3.0 only** - see [`LICENSE`](LICENSE).
 

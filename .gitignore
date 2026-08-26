@@ -13,6 +13,11 @@ tools/.mask_check_in.json
 tools/.mask_check_out.json
 .playwright-mcp/
 
+# Local interpreter choice: pyenv-virtualenv names are machine-specific, and a
+# clone that inherits one fails with "version not found". The supported range
+# lives in pyproject.toml instead.
+.python-version
+
 # Python
 __pycache__/
 *.py[cod]

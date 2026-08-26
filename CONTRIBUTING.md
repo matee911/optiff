@@ -42,7 +42,7 @@ By submitting a contribution you agree to the following.
 
 ### 1. Definitions
 
-"The project owner" means matee911, the copyright holder of this project.
+"The project owner" means Mateusz Pawlik, the copyright holder of this project.
 "You" means the copyright owner, or the person legally authorised by the
 copyright owner, who is entering this agreement. "Contribution" means any work
 of authorship you deliberately submit to this project, in any form and through
