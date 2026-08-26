@@ -38,7 +38,11 @@ jobs:
       # The same three checks pre-commit runs locally, in the same order.
       - run: ruff format --check .
       - run: ruff check .
-      - run: pyrefly check
+
+      # Point pyrefly at this interpreter explicitly. Left to itself it picks
+      # one off PATH, and checking against another version's standard library
+      # invents errors that have nothing to do with the code.
+      - run: pyrefly check --python-interpreter-path "$(which python)"
 
       # The suite needs no sample files - it generates them.
       - run: pytest
