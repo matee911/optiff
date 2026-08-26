@@ -5,154 +5,21 @@ from __future__ import annotations
 import tifffile
 
 from optiff.document import TiffDocument
-from optiff.domain import DataBlock, ImageInfo, PhotoshopAnalysis
+from optiff.domain import PhotoshopAnalysis
+from optiff.formatters.analyze import (
+    _compression_summary,
+    _layer_line,
+    render_size_tree,
+)
 from optiff.metadata import MetadataAnalyzer
 from optiff.provenance import read_provenance
 from optiff.psd_file import DocumentError, parse_document
-from optiff.psd_layers import Layer, read_layer_stack
+from optiff.psd_layers import read_layer_stack
 from optiff.psd_links import read_linked_files
 from optiff.storage import PhysicalClassifier, PhysicalStorageAnalyzer
 from optiff.units import format_size
 
 WIDTH = 80
-
-
-def render_size_tree(
-    blocks: list[DataBlock],
-    file_size: int,
-    info: ImageInfo | None = None,
-) -> list[str]:
-    """
-    The size tree as a list of lines.
-
-    The last node at each level gets `└──`, the earlier ones `├──`. A node's
-    children follow its own line rather than preceding it; an earlier version
-    printed `└── TIFF tag` before further `├──` entries, which produced an
-    inconsistent tree.
-
-    >>> from optiff.domain import DataBlock, PhysicalRange
-    >>> blocks = [
-    ...     DataBlock("XMP", 700, (PhysicalRange(0, 60),)),
-    ...     DataBlock("ICC Profile", 34675, (PhysicalRange(60, 100),)),
-    ... ]
-    >>> for line in render_size_tree(blocks, 100):
-    ...     print(line)
-          100.00 B  TIFF
-    ├──     60.00 B  XMP                                     60.00%
-    │   └── TIFF tag 700
-    └──     40.00 B  ICC Profile                             40.00%
-        └── TIFF tag 34675
-    """
-    lines = [f"{format_size(file_size):>12}  TIFF"]
-
-    ordered = sorted(blocks, key=lambda block: block.size, reverse=True)
-
-    for index, block in enumerate(ordered):
-        is_last = index == len(ordered) - 1
-
-        connector = "└──" if is_last else "├──"
-        indent = "    " if is_last else "│   "
-
-        percentage = block.size / file_size * 100 if file_size else 0.0
-
-        lines.append(
-            f"{connector} "
-            f"{format_size(block.size):>12}  "
-            f"{block.name:<38} "
-            f"{percentage:>6.2f}%"
-        )
-
-        lines.extend(f"{indent}{child}" for child in _block_children(block, info))
-
-    return lines
-
-
-def _block_children(block: DataBlock, info: ImageInfo | None) -> list[str]:
-    """The child lines of a node, already carrying their own glyphs."""
-    details: list[str] = []
-
-    if block.name == "IMAGE DATA" and info is not None:
-        details.append(f"{info.width} × {info.height}")
-        details.append(
-            f"{info.samples} samples × {', '.join(map(str, info.bits_per_sample))}-bit"
-        )
-        details.append(f"Compression: {info.compression_name}")
-        details.append(f"Predictor: {info.predictor or 'None'}")
-
-        if block.is_fragmented:
-            details.append(f"Strips: {len(block.ranges)}")
-
-    if block.tag is not None:
-        details.append(f"TIFF tag {block.tag}")
-
-    return [
-        f"{'└──' if index == len(details) - 1 else '├──'} {detail}"
-        for index, detail in enumerate(details)
-    ]
-
-
-def _layer_line(layer: Layer) -> str:
-    """
-    One layer description line, indented by its nesting inside groups.
-
-    >>> line = _layer_line(Layer(0, "Sky", 0, 0, 100, 200, (), "mul ", 128, 0, 0))
-    >>> line.split()
-    ['Sky', '0.00', 'B', '200x100', '-', 'Multiply', '50%']
-    """
-    name = "  " * layer.depth + (layer.name or "(unnamed)")
-
-    bounds = "-" if layer.is_empty else f"{layer.width}x{layer.height}"
-
-    marks = []
-
-    if layer.is_hidden:
-        marks.append("hidden")
-
-    if layer.section != "layer":
-        marks.append(layer.section)
-
-    suffix = f"  [{', '.join(marks)}]" if marks else ""
-
-    return (
-        f"{name:<40} "
-        f"{format_size(layer.data_size):>11}  "
-        f"{bounds:>12}  "
-        f"{layer.compression_short:<6} "
-        f"{layer.blend_mode_name} {layer.opacity_percent}%"
-        f"{suffix}"
-    )
-
-
-def _compression_summary(stack) -> str:
-    """
-    How many channel bytes fall to each compression method.
-
-    >>> from optiff.psd_layers import LayerChannel, LayerStack
-    >>> layer = Layer(
-    ...     0, "x", 0, 0, 1, 1,
-    ...     (LayerChannel(0, 1002, 0), LayerChannel(1, 502, 3)),
-    ...     "norm", 255, 0, 0,
-    ... )
-    >>> _compression_summary(LayerStack((layer,), 1, False, 0, 0))
-    'RAW 1000.00 B, ZIP with prediction 500.00 B'
-    """
-    totals: dict[str, int] = {}
-
-    for layer in stack.layers:
-        for channel in layer.channels:
-            if channel.pixel_bytes == 0:
-                continue
-
-            name = channel.compression_name
-            totals[name] = totals.get(name, 0) + channel.pixel_bytes
-
-    if not totals:
-        return "no channel data"
-
-    return ", ".join(
-        f"{name} {format_size(size)}"
-        for name, size in sorted(totals.items(), key=lambda item: item[1], reverse=True)
-    )
 
 
 class Reporter:

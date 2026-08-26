@@ -1,0 +1,136 @@
+================================================================================
+TIFF STORAGE ANALYZER
+================================================================================
+File:          <PATH>
+File size:     19.14 KB (19,600 bytes)
+Format:        Classic TIFF
+Byte order:    little-endian
+Image:         48 × 64
+
+================================================================================
+SIZE TREE
+================================================================================
+
+    19.14 KB  TIFF
+├──     18.00 KB  IMAGE DATA                              94.04%
+│   ├── 48 × 64
+│   ├── 3 samples × 16-bit
+│   ├── Compression: NONE
+│   └── Predictor: 1
+├──     668.00 B  Photoshop ImageSourceData                3.41%
+│   └── TIFF tag 37724
+└──     195.00 B  XMP                                      0.99%
+    └── TIFF tag 700
+
+================================================================================
+EMBEDDED METADATA / CONTENT
+================================================================================
+
+XMP:                             195.00 B
+Content Credentials in XMP:      NO / not detected
+C2PA in XMP:                     NO
+Photoshop Image Resources:       NOT FOUND
+Photoshop ImageSourceData:       668.00 B
+IPTC:                            NOT FOUND
+ICC Profile:                     NOT FOUND
+EXIF:                            NOT FOUND
+
+================================================================================
+PROVENANCE / HISTORY
+================================================================================
+
+Content Credentials (CAI):       marker only (enabled, 19 B - too small for a signed manifest)
+Generative AI (GenI):            NOT FOUND
+Written by Photoshop:            UNKNOWN
+Compositor version:              UNKNOWN
+
+================================================================================
+PHOTOSHOP IMAGESOURCEDATA
+================================================================================
+
+Signature:       Adobe Photoshop Document Data Block
+Total size:      668.00 B
+Parsed blocks:   6
+
+BLOCKS
+--------------------------------------------------------------------------------
+  1. Lr16         384.00 B  offset=0x24  Layers (16-bit)
+  2. LMsk          14.00 B  offset=0x1B0  Layer mask
+  3. Pat2           0.00 B  offset=0x1CC  Patterns (version 2)
+  4. CAI           19.00 B  offset=0x1D8  Content Authenticity (C2PA)
+  5. cinf          22.00 B  offset=0x1F8  Compositor info
+  6. lnk2         116.00 B  offset=0x21C  Linked smart objects
+
+================================================================================
+LAYERS
+================================================================================
+
+Layer count:     24940
+Transparency:    no
+Channel data:    0.00 B
+Compression:     no channel data
+WARNING: records plus channels give 20 B, the section holds 384 B
+UWAGA: layer-record-failed @0x44 implausible channel count: 24940
+
+     NAME                                            SIZE        BOUNDS  COMPR  MODE
+--------------------------------------------------------------------------------
+
+================================================================================
+LINKED SMART OBJECTS
+================================================================================
+
+Files:           1
+Embedded data:   48.00 B
+
+  1. embedded.psb                                 48.00 B  PSB / embedded
+     uid=abc
+     PSB 800x600 3ch 16-bit RGB, Image Data: RLE
+       Color Mode Data                     4.00 B    8.33%
+       Image Resources                     8.00 B   16.67%
+       Layer and Mask Information          8.00 B   16.67%
+       Image Data                          2.00 B    4.17%
+
+
+================================================================================
+UNACCOUNTED PHYSICAL AREAS
+================================================================================
+
+ 1.      15.00 B  offset=0xF7 end=0x106
+    Type:       ZERO / PADDING
+ 2.      14.00 B  offset=0x482 end=0x490
+    Type:       ZERO / PADDING
+ 3.       1.00 B  offset=0x1E5 end=0x1E6
+    Type:       ZERO / PADDING
+
+================================================================================
+TIFF STRUCTURE / ENTRIES
+================================================================================
+
+    256  ImageWidth                          LONG       count=1          size=    4.00 B
+    257  ImageLength                         LONG       count=1          size=    4.00 B
+    258  BitsPerSample                       SHORT      count=3          size=    6.00 B
+    259  Compression                         SHORT      count=1          size=    2.00 B
+    262  PhotometricInterpretation           SHORT      count=1          size=    2.00 B
+    270  ImageDescription                    ASCII      count=23         size=   23.00 B
+    273  StripOffsets                        LONG       count=1          size=    4.00 B
+    277  SamplesPerPixel                     SHORT      count=1          size=    2.00 B
+    278  RowsPerStrip                        LONG       count=1          size=    4.00 B
+    279  StripByteCounts                     LONG       count=1          size=    4.00 B
+    282  XResolution                         RATIONAL   count=1          size=    8.00 B
+    283  YResolution                         RATIONAL   count=1          size=    8.00 B
+    284  PlanarConfiguration                 SHORT      count=1          size=    2.00 B
+    296  ResolutionUnit                      SHORT      count=1          size=    2.00 B
+    305  Software                            ASCII      count=12         size=   12.00 B
+    700  XMP                                 BYTE       count=195        size=  195.00 B
+  37724  ImageSourceData                     UNDEFINED  count=668        size=  668.00 B
+
+================================================================================
+COMPRESSION / IMAGE DATA
+================================================================================
+
+Compression: NONE
+Predictor:   1
+Bits/sample: [16]
+================================================================================
+DONE
+================================================================================

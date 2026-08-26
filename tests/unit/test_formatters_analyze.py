@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from optiff.domain import DataBlock, ImageInfo, PhysicalRange
-from optiff.report import render_size_tree
+from optiff.formatters.analyze import render_size_tree
 
 IMAGE_INFO = ImageInfo(
     width=100,

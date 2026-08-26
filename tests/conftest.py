@@ -19,6 +19,7 @@ import tifffile
 
 from tests.sample_files import CASES, write
 from tests.unit.builders import psd_container
+from tests.unit.test_psd_links import link_record
 
 PHOTOSHOP_TAG = 37724
 XMP_TAG = 700
@@ -152,6 +153,62 @@ def synthetic_psd_tiff(
         extratags=[
             (XMP_TAG, 1, len(XMP_SAMPLE), XMP_SAMPLE, True),
             (PHOTOSHOP_TAG, 7, len(psd_blob), psd_blob, True),
+        ],
+    )
+
+
+@pytest.fixture(scope="session")
+def psd_blob_with_linked_file() -> bytes:
+    """Like `psd_blob`, plus an `lnk2` block with one embedded PSB."""
+    embedded_psb = (
+        b"8BPS"
+        + (2).to_bytes(2, "big")
+        + bytes(6)
+        + (3).to_bytes(2, "big")
+        + (600).to_bytes(4, "big")
+        + (800).to_bytes(4, "big")
+        + (16).to_bytes(2, "big")
+        + (3).to_bytes(2, "big")
+        + (0).to_bytes(4, "big")  # Color Mode Data
+        + (4).to_bytes(4, "big")
+        + b"abcd"  # Image Resources
+        + (0).to_bytes(8, "big")  # Layer and Mask Information
+        + (1).to_bytes(2, "big")  # Image Data compression (RLE)
+    )
+
+    record = link_record(
+        name="embedded.psb", size=len(embedded_psb), payload=embedded_psb
+    )
+
+    return psd_container(
+        ("Lr16", b"layers" * 64),
+        ("LMsk", b"\x00" * 14),
+        ("Pat2", b""),
+        ("CAI ", b"content-credentials"),
+        ("cinf", b'{"compositor": "test"}'),
+        ("lnk2", record),
+        byte_order="<",
+    )
+
+
+@pytest.fixture(scope="session")
+def synthetic_psd_tiff_with_linked_file(
+    tmp_path_factory: pytest.TempPathFactory,
+    psd_blob_with_linked_file: bytes,
+) -> Path:
+    path = tmp_path_factory.mktemp("tiff") / "psd-linked.tif"
+
+    return _write(
+        path,
+        extratags=[
+            (XMP_TAG, 1, len(XMP_SAMPLE), XMP_SAMPLE, True),
+            (
+                PHOTOSHOP_TAG,
+                7,
+                len(psd_blob_with_linked_file),
+                psd_blob_with_linked_file,
+                True,
+            ),
         ],
     )
 
