@@ -51,6 +51,9 @@ filterwarnings = ["error", "ignore::DeprecationWarning:tifffile.*"]
 
 [tool.coverage.run]
 source = ["optiff"]
+# Exercised by tests/e2e/test_cli.py through `python -m optiff`; coverage.py
+# cannot see into that subprocess without extra plumbing.
+omit = ["optiff/__main__.py"]
 
 [tool.coverage.report]
 show_missing = true

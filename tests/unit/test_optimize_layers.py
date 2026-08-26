@@ -11,14 +11,21 @@ import hashlib
 import numpy as np
 import pytest
 
-from optiff.optimize_layers import HEADER, plan_layer_section
+from optiff.optimize_layers import (
+    HEADER,
+    ChannelResult,
+    _decode,
+    _geometry,
+    plan_layer_section,
+)
 from optiff.psd_codec import (
     RAW,
+    RLE,
     ZIP_PREDICTED,
     ChannelGeometry,
     decode_channel,
 )
-from optiff.psd_layers import parse_layers
+from optiff.psd_layers import Layer, LayerChannel, parse_layers
 from optiff.readers import BytesReader
 from optiff.segments import materialise, total_size
 from tests.unit.builders import layer_record, layer_section
@@ -330,3 +337,57 @@ def test_works_in_both_byte_orders(byte_order):
     )
     assert plain == data
     assert len(rebuilt) < len(source)
+
+
+# ============================================================================
+# ChannelResult.saved / _geometry / _decode
+# ============================================================================
+
+
+def test_channel_result_saved_is_before_minus_after():
+    result = ChannelResult(
+        layer="0:Sky",
+        channel="0:R",
+        before=100,
+        after=60,
+        compression=RAW,
+        digest="abc",
+        digest_of="pixels",
+    )
+
+    assert result.saved == 40
+
+
+def _layer(*, width, height) -> Layer:
+    return Layer(
+        index=0,
+        name="L",
+        top=0,
+        left=0,
+        bottom=height,
+        right=width,
+        channels=(),
+        blend_mode="norm",
+        opacity=255,
+        clipping=0,
+        flags=0,
+    )
+
+
+def test_geometry_rejects_raw_data_of_the_wrong_size():
+    channel = LayerChannel(
+        channel_id=0, size=HEADER + 3, compression=RAW
+    )  # 3 B of pixels
+
+    geometry = _geometry(_layer(width=WIDTH, height=ROWS), channel, bpp=2)
+
+    assert geometry is None
+
+
+def test_decode_returns_none_when_the_channel_cannot_be_decoded():
+    # Too short to be a valid RLE row-length table for a 4-row image.
+    channel = LayerChannel(channel_id=0, size=HEADER + 2, compression=RLE)
+    geometry = ChannelGeometry(4, 4, 2)
+    reader = BytesReader(bytes(HEADER) + b"\x00\x00")
+
+    assert _decode(reader, channel, geometry) is None

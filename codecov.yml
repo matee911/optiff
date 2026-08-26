@@ -33,6 +33,20 @@ component_management:
         - "optiff/commands/**"
         - "optiff/formatters/**"
 
+flag_management:
+  default_rules:
+    carryforward: false
+  individual_flags:
+    # unit / integration / doctest run on every push+PR (see ci.yml).
+    - name: unit
+    - name: integration
+    - name: doctest
+    # Needs multi-gigabyte production files that never enter the repo
+    # (tests/conftest.py), so it is never uploaded from CI. Carryforward
+    # keeps its last known value instead of showing "no report" here.
+    - name: bigfile
+      carryforward: true
+
 comment:
   layout: "reach, diff, flags, components, files"
 
