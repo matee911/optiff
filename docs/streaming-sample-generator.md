@@ -5,7 +5,7 @@
 - `tests/sample_files.py` builds every case fully in memory; fine at 4.6 kB/channel, impossible at gigabytes.
 - Add `--scale N` to `python -m tests.sample_files`, but only for `raw-layers` — the one case whose channels are RAW (no RLE table, no zlib), so every length is known analytically and nothing needs seek-based patching.
 - A chunked version of the existing `smooth()` random walk is proven byte-identical to the current one (verified empirically: same `numpy.random.Generator`, called in row-chunks instead of one call, produces the exact same bytes). This is what lets the writer stream to disk without holding gigabytes in RAM.
-- `--scale` past ~500 MB (estimated, printed up front) refuses without `--yes`.
+- `--scale` past an estimated-size threshold (`SIZE_WARN_BYTES`, printed up front) refuses without `--yes`.
 - `smart-object` scaling is explicitly **out of scope** here — it wraps a nested nested PSB/link-record layout and doubles the surface for a case the issue's acceptance criteria don't require. Follow-up if ever needed.
 - Closes #13 in one PR. Issue #12 (content profiles, benchmark script) is separate, stacked follow-up work — not designed here.
 

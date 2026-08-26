@@ -359,6 +359,9 @@ class Sample:
     name: str
     summary: str
     build: Callable[[], bytes]
+    #: Whether `write_scaled_raw_layers` can stream this case past RAM - true
+    #: only for the RAW-only cases whose channel lengths are known up front.
+    scalable: bool = False
 
 
 CASES: dict[str, Sample] = {
@@ -368,6 +371,7 @@ CASES: dict[str, Sample] = {
             "raw-layers",
             "Layers stored uncompressed - the ordinary case and the big win.",
             _raw_layers,
+            scalable=True,
         ),
         Sample(
             "rle-layers",
@@ -462,8 +466,9 @@ def build(name: str) -> bytes:
 #: Cases whose channels are RAW - no RLE table, no zlib - so every byte
 #: length is known before a single pixel is generated. Only these can stream
 #: to disk instead of building fully in memory; scaling any other case would
-#: need seek-based patching this file doesn't implement.
-SCALABLE_CASES = frozenset({"raw-layers"})
+#: need seek-based patching this file doesn't implement. Derived from each
+#: `Sample`'s own `scalable` flag, not maintained as a separate list.
+SCALABLE_CASES = frozenset(name for name, sample in CASES.items() if sample.scalable)
 
 #: Refuse to write a file past this many bytes without --yes.
 SIZE_WARN_BYTES = 500_000_000
@@ -477,7 +482,6 @@ class _ScaledLayout:
     """Every length and header byte needed to stream a scaled raw-layers file."""
 
     rows: int
-    channel_len: int
     image_len: int
     section_bytes: bytes
     block_header: bytes
@@ -525,7 +529,6 @@ def _scaled_layout(scale: int) -> _ScaledLayout:
 
     return _ScaledLayout(
         rows=rows,
-        channel_len=channel_len,
         image_len=image_len,
         section_bytes=section_bytes,
         block_header=block_header,
@@ -574,31 +577,25 @@ def scale_to_cross(tag_37724_bytes: int) -> int:
     return lo
 
 
-def _write_zeros(
-    handle: BinaryIO, n: int, written: int, progress: Callable[[int], None]
-) -> int:
+def _write_zeros(handle: BinaryIO, n: int, progress: Callable[[int], None]) -> None:
     """Streams `n` zero bytes - the base TIFF image strip nobody reads."""
     chunk_size = CHUNK_ROWS * WIDTH * BPP * 3
-    zeros = bytes(min(chunk_size, n))
+    zeros = bytes(chunk_size)
     remaining = n
 
     while remaining > 0:
-        block = zeros[: min(chunk_size, remaining)]
+        block = zeros if remaining >= chunk_size else zeros[:remaining]
         handle.write(block)
         remaining -= len(block)
-        written += len(block)
-        progress(written)
-
-    return written
+        progress(handle.tell())
 
 
 def _write_channel(
     handle: BinaryIO,
     seed: int,
     rows: int,
-    written: int,
     progress: Callable[[int], None],
-) -> int:
+) -> None:
     """Streams one RAW channel's pixels, `CHUNK_ROWS` rows at a time."""
     rng = np.random.default_rng(seed)
     remaining = rows
@@ -607,10 +604,7 @@ def _write_channel(
         n = min(CHUNK_ROWS, remaining)
         handle.write(_walk_chunk(rng, WIDTH, n))
         remaining -= n
-        written += n * WIDTH * BPP
-        progress(written)
-
-    return written
+        progress(handle.tell())
 
 
 def _progress_reporter(total: int) -> Callable[[int], None]:
@@ -635,35 +629,37 @@ def _progress_reporter(total: int) -> Callable[[int], None]:
     return progress
 
 
-def write_scaled_raw_layers(path: Path, *, scale: int) -> Path:
+def write_scaled_raw_layers(
+    path: Path, *, scale: int, layout: _ScaledLayout | None = None
+) -> Path:
     """Streams a scaled "raw-layers" case to `path` without holding it in RAM."""
-    layout = _scaled_layout(scale)
+    layout = layout if layout is not None else _scaled_layout(scale)
     progress = _progress_reporter(layout.total)
-    written = 0
 
     with path.open("wb") as handle:
         handle.write(layout.head)
-        written += len(layout.head)
-        written = _write_zeros(handle, layout.image_len, written, progress)
+        _write_zeros(handle, layout.image_len, progress)
 
         handle.write(CONTAINER_V0002)
         handle.write(layout.block_header)
         handle.write(layout.section_bytes)
-        written += (
-            len(CONTAINER_V0002) + len(layout.block_header) + len(layout.section_bytes)
-        )
 
         for seed in (1, 2, 3):
             handle.write(RAW.to_bytes(HEADER, "little"))
-            written += HEADER
-            written = _write_channel(handle, seed, layout.rows, written, progress)
+            _write_channel(handle, seed, layout.rows, progress)
 
         handle.write(b"\x00" * layout.padding)
 
     return path
 
 
-def write(name: str, directory: Path, *, scale: int = 1) -> Path:
+def write(
+    name: str,
+    directory: Path,
+    *,
+    scale: int = 1,
+    layout: _ScaledLayout | None = None,
+) -> Path:
     """Writes one case into `directory` and returns its path."""
     path = directory / f"{name}.tif"
 
@@ -676,7 +672,7 @@ def write(name: str, directory: Path, *, scale: int = 1) -> Path:
             f"{name!r} cannot be scaled; only {sorted(SCALABLE_CASES)} can"
         )
 
-    return write_scaled_raw_layers(path, scale=scale)
+    return write_scaled_raw_layers(path, scale=scale, layout=layout)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -710,6 +706,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     args.directory.mkdir(parents=True, exist_ok=True)
 
+    if args.scale < 1:
+        parser.error(f"--scale must be a positive integer, got {args.scale}")
+
+    layout = None
+
     if args.scale != 1:
         names = args.only or []
 
@@ -718,17 +719,17 @@ def main(argv: list[str] | None = None) -> int:
                 f"--scale requires --only naming one of {sorted(SCALABLE_CASES)}"
             )
 
-        size = estimated_scaled_size(args.scale)
-        print(f"estimated size: {size:,} B")
+        layout = _scaled_layout(args.scale)
+        print(f"estimated size: {layout.total:,} B")
 
-        if size > SIZE_WARN_BYTES and not args.yes:
+        if layout.total > SIZE_WARN_BYTES and not args.yes:
             parser.error(
-                f"refusing to write {size:,} B without --yes "
+                f"refusing to write {layout.total:,} B without --yes "
                 f"(threshold {SIZE_WARN_BYTES:,} B)"
             )
 
     for name in args.only or sorted(CASES):
-        path = write(name, args.directory, scale=args.scale)
+        path = write(name, args.directory, scale=args.scale, layout=layout)
 
         print(f"{path.name:<30}{path.stat().st_size:>10,} B  {CASES[name].summary}")
 

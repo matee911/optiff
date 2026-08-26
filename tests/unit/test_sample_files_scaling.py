@@ -14,6 +14,30 @@ import pytest
 from tests import sample_files
 
 
+def test_a_large_write_never_generates_more_than_one_chunk_at_once(
+    tmp_path, monkeypatch
+):
+    # Arrange - a scale whose full channel (rows > CHUNK_ROWS) would need
+    # several chunks; if the writer ever fell back to building the whole
+    # payload in memory, every call here would ask for all of `rows` at once.
+    scale = sample_files.CHUNK_ROWS // sample_files.ROWS + 5
+    seen_row_counts = []
+    real_walk_chunk = sample_files._walk_chunk
+
+    def spying_walk_chunk(rng, width, n_rows):
+        seen_row_counts.append(n_rows)
+        return real_walk_chunk(rng, width, n_rows)
+
+    monkeypatch.setattr(sample_files, "_walk_chunk", spying_walk_chunk)
+
+    # Act
+    sample_files.write("raw-layers", tmp_path, scale=scale)
+
+    # Assert - streamed in more than one call, and never past the chunk cap
+    assert len(seen_row_counts) > 1
+    assert all(n <= sample_files.CHUNK_ROWS for n in seen_row_counts)
+
+
 def test_streamed_bytes_match_the_estimate(tmp_path):
     # Arrange
     scale = 5
