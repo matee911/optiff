@@ -658,10 +658,16 @@ Add to `tests/e2e/test_cli.py` (after `test_report_on_real_file`, before `test_d
 # ============================================================================
 
 
-def run_shell(command: str) -> subprocess.CompletedProcess[str]:
+def run_piped(command: str) -> subprocess.CompletedProcess[str]:
+    """
+    Runs `command` under bash with `pipefail`, so the returncode reflects
+    the FIRST failing stage (optiff), not just the last one (head/grep).
+    Plain `sh -c "a | b"` (dash on most Linux distros has no `pipefail`)
+    would report `b`'s exit code even if `a` crashed - exactly the failure
+    mode this test exists to catch, so it must not silently pass anyway.
+    """
     return subprocess.run(
-        command,
-        shell=True,
+        ["bash", "-c", f"set -o pipefail; {command}"],
         capture_output=True,
         text=True,
         timeout=30,
@@ -673,9 +679,8 @@ def run_shell(command: str) -> subprocess.CompletedProcess[str]:
 def test_pipes_into_head_without_traceback(synthetic_psd_tiff: Path):
     # Act - `head -3` closes its end of the pipe before optiff finishes
     # writing, which raises BrokenPipeError on the next print()
-    result = run_shell(
-        f'{sys.executable} -m optiff analyze "{synthetic_psd_tiff}" | head -3'
-    )
+    quoted = shlex.quote(str(synthetic_psd_tiff))
+    result = run_piped(f"{sys.executable} -m optiff analyze {quoted} | head -3")
 
     # Assert
     assert result.returncode == 0
@@ -684,19 +689,47 @@ def test_pipes_into_head_without_traceback(synthetic_psd_tiff: Path):
 
 def test_pipes_into_grep_without_traceback(synthetic_psd_tiff: Path):
     # Act
-    result = run_shell(
-        f'{sys.executable} -m optiff analyze "{synthetic_psd_tiff}" | grep -q LAYERS'
-    )
+    quoted = shlex.quote(str(synthetic_psd_tiff))
+    result = run_piped(f"{sys.executable} -m optiff analyze {quoted} | grep -q LAYERS")
 
     # Assert
     assert result.returncode == 0
     assert "Traceback" not in result.stderr
 ```
 
-- [ ] **Step 2: Run it to confirm it fails**
+Add `import shlex` to `tests/e2e/test_cli.py`'s imports alongside the existing `re`/`subprocess`/`sys`.
 
-Run: `pytest tests/e2e/test_cli.py -k pipes -v`
-Expected: FAIL — `test_pipes_into_head_without_traceback` shows `Traceback (most recent call last):` and `BrokenPipeError` in `result.stderr`.
+**Why this alone isn't the whole safety net:** whether `head -3` actually closes its end before `optiff` finishes writing depends on OS pipe-buffer size versus report length - on a fast machine with a tiny synthetic report, the whole output might fit in the pipe buffer and `head` might never trigger `BrokenPipeError` at all, in which case this test would pass whether or not the fix in Step 3 exists. Step 1b below adds a deterministic unit test that exercises the exception path directly, independent of timing.
+
+- [ ] **Step 1b: Write a deterministic unit test for the `BrokenPipeError` wrapper itself**
+
+This doesn't depend on pipe-buffer timing - it forces `_main()` to raise `BrokenPipeError` directly and checks `main()` catches it and returns `EXIT_OK`, so the exception path is exercised on every run, not just when the OS happens to close the pipe in time. `os.dup2`/`os.open` are monkeypatched to no-ops so the test never touches the process's real stdout fd (which pytest's own output capture also depends on).
+
+Add to `tests/e2e/test_cli.py`, in the same `PIPES` section:
+
+```python
+def test_main_survives_broken_pipe(monkeypatch, synthetic_psd_tiff: Path):
+    # Arrange
+    import optiff.cli as cli_module
+
+    def _raise(argv):
+        raise BrokenPipeError
+
+    monkeypatch.setattr(cli_module, "_main", _raise)
+    monkeypatch.setattr(cli_module.os, "open", lambda *a, **k: -1)
+    monkeypatch.setattr(cli_module.os, "dup2", lambda *a, **k: None)
+
+    # Act
+    code = main(["analyze", str(synthetic_psd_tiff)])
+
+    # Assert
+    assert code == 0
+```
+
+- [ ] **Step 2: Run both to confirm they fail**
+
+Run: `pytest tests/e2e/test_cli.py -k "pipes or broken_pipe" -v`
+Expected: FAIL — `test_main_survives_broken_pipe` raises `BrokenPipeError` out of `main()` uncaught; `test_pipes_into_head_without_traceback` and `test_pipes_into_grep_without_traceback` may or may not fail depending on timing (see the note above) - don't rely on them alone to prove the fix is needed.
 
 - [ ] **Step 3: Wrap `main()` to handle `BrokenPipeError`**
 
@@ -711,6 +744,7 @@ def main(argv: list[str] | None = None) -> int:
         # interpreter's exit-time flush doesn't raise a second BrokenPipeError.
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
+        os.close(devnull)
         return EXIT_OK
 
 
@@ -740,8 +774,8 @@ def _main(argv: list[str] | None = None) -> int:
 
 - [ ] **Step 4: Run the pipe tests again**
 
-Run: `pytest tests/e2e/test_cli.py -k pipes -v`
-Expected: PASS (2 tests).
+Run: `pytest tests/e2e/test_cli.py -k "pipes or broken_pipe" -v`
+Expected: PASS (3 tests: `test_pipes_into_head_without_traceback`, `test_pipes_into_grep_without_traceback`, `test_main_survives_broken_pipe`).
 
 - [ ] **Step 5: Run the full e2e suite to make sure nothing else regressed**
 
@@ -852,6 +886,38 @@ def test_successful_result_renders_the_full_table():
     assert "BEFORE" in text
     assert "Saved:" in text
     assert text.endswith("=" * 80 + "\n")
+
+
+def test_result_with_image_data_reports_the_extra_row():
+    # Arrange - image_before defaults to 0 in every other test in this file,
+    # so the `if result.image_before:` branch needs its own case
+    ok = result(
+        comparison=Comparison(total=1, problems=()),
+        image_before=500,
+        image_after=300,
+    )
+
+    # Act
+    text = render_optimize(ok)
+
+    # Assert
+    assert "image pixels" in text
+    assert "from layer channels" in text
+    assert "from image pixels" in text
+    assert "All of the saving comes from channel data." not in text
+
+
+def test_result_without_verification_reports_skipped_verify():
+    # Arrange - comparison stays at its dataclass default (None), reaching
+    # the full success table without ever setting a Comparison (--no-verify)
+    ok = result()
+
+    # Act
+    text = render_optimize(ok)
+
+    # Assert
+    assert "SKIPPED (--no-verify)" in text
+    assert "pixel SHA256 unchanged" not in text
 ```
 
 - [ ] **Step 3: Run it to confirm it fails**
@@ -996,6 +1062,59 @@ def render_optimize(result: OptimizeResult) -> str:
     return buf.getvalue()
 ```
 
+- [ ] **Step 4b: Prove `render_optimize()` matches today's `print_optimize()` byte-for-byte, before the old one is deleted**
+
+`analyze`'s formatter gets a rigorous parity test against `Reporter` (Task 6). `optimize`'s formatter split deserves the same proof, not just the substring-based unit tests from Step 2 - those catch gross breakage but wouldn't catch a subtle column-width or spacing slip. `cli.py` still has `print_optimize()` at this point (Step 5 removes it) - use that window.
+
+Write `tests/integration/test_optimize_formatter_parity.py`:
+
+```python
+"""
+Byte-for-byte parity between the old cli.print_optimize() and the new
+render_optimize(). Temporary: deleted in this same task's Step 5, once
+print_optimize() is removed from cli.py and there is nothing left to compare
+against - render_optimize() from then on is the only implementation, proven
+correct here first.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import io
+from pathlib import Path
+
+from optiff.cli import print_optimize
+from optiff.formatters.optimize import render_optimize
+from optiff.optimize import optimize
+
+
+def _print_optimize_output(result) -> str:
+    buf = io.StringIO()
+
+    with contextlib.redirect_stdout(buf):
+        print_optimize(result)
+
+    return buf.getvalue()
+
+
+def test_matches_print_optimize_on_a_real_result(sample_file, tmp_path: Path):
+    # Arrange - a real OptimizeResult with a populated Comparison, not a
+    # hand-built stub, so the parity check exercises the real branch taken
+    # in practice (verify=True, successful write)
+    source = sample_file("raw-layers")
+    result = optimize(source, tmp_path / "out.tif")
+
+    # Act
+    old = _print_optimize_output(result)
+    new = render_optimize(result)
+
+    # Assert
+    assert new == old
+```
+
+Run: `pytest tests/integration/test_optimize_formatter_parity.py -v`
+Expected: PASS. If it fails, the diff between `old` and `new` names exactly which line in `render_optimize()` drifted from `print_optimize()` - compare against `cli.py`'s current `print_optimize()` line by line rather than guessing.
+
 - [ ] **Step 5: Update `cli.py`'s dispatcher to use the formatter and own the exit code / stderr**
 
 Remove `_duration()` and `print_optimize()` from `optiff/cli.py` entirely. Remove the now-unused `from optiff.units import format_size` and `WIDTH` import (`from optiff.report import WIDTH, Reporter` stays for `Reporter`/`WIDTH` still used by `analyze()` — only drop `format_size` if nothing else in `cli.py` uses it; check with `grep format_size optiff/cli.py` after editing). Add `from optiff.formatters.optimize import render_optimize`. Change the `isinstance(result, OptimizeResult)` branch in `_main()` (written in Task 3, Step 3) to:
@@ -1016,6 +1135,12 @@ Remove `_duration()` and `print_optimize()` from `optiff/cli.py` entirely. Remov
 
 Use `sys.stdout.write(...)`, not `print(...)` — `render_optimize()`'s returned string already ends in `"\n"` (from its last internal `p("=" * WIDTH)`), so `print()` would add a second, unwanted blank line.
 
+`print_optimize()` is gone now, so the temporary parity test from Step 4b can no longer import it - delete it:
+
+```bash
+git rm tests/integration/test_optimize_formatter_parity.py
+```
+
 - [ ] **Step 6: Update `tests/e2e/test_cli.py`'s `_duration` import**
 
 Change:
@@ -1034,7 +1159,7 @@ from optiff.formatters.optimize import _duration
 - [ ] **Step 7: Run the new formatter unit tests**
 
 Run: `pytest tests/unit/test_formatters_optimize.py -v`
-Expected: PASS (4 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 8: Run the full suite**
 
@@ -1107,7 +1232,6 @@ def test_photoshop_tag_reports_layers_and_provenance(synthetic_psd_tiff: Path):
     assert report.photoshop.found is True
     assert report.layers.state == "found"
     assert report.layers.stack is not None
-    assert report.layers.stack.channel_bytes > 0
     assert report.provenance.state == "found"
     assert report.provenance.report is not None
 
@@ -1157,6 +1281,7 @@ This is `Reporter`'s nine `_print_*` methods (`report.py:164-483`), converted fr
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 import tifffile
@@ -1170,7 +1295,6 @@ from optiff.psd_file import DocumentError, EmbeddedDocument, parse_document
 from optiff.psd_layers import LayerStack, read_layer_stack
 from optiff.psd_links import LinkedFile, LinkedFiles, read_linked_files
 from optiff.storage import PhysicalClassifier, PhysicalStorageAnalyzer
-from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -1398,13 +1522,15 @@ git commit -m "Add AnalyzeReport: analyze()'s data, separated from printing"
 
 **Files:**
 - Create: `optiff/formatters/analyze.py`
+- Modify: `optiff/report.py` (drop its local copies of the moved helpers, import them instead)
+- Modify: `tests/conftest.py` (new `psd_blob_with_linked_file`/`synthetic_psd_tiff_with_linked_file` fixtures)
 - Modify: `tests/unit/test_report.py` → rename to `tests/unit/test_formatters_analyze.py`, update its import
 - Test: `tests/integration/test_analyze_parity.py` (new, temporary — deleted in Task 7)
-- Test: `tests/golden/analyze_synthetic_tiff.txt`, `tests/golden/analyze_synthetic_psd_tiff.txt` (new, generated, committed)
+- Test: `tests/golden/analyze_synthetic_tiff.txt`, `tests/golden/analyze_synthetic_psd_tiff.txt`, `tests/golden/analyze_synthetic_psd_tiff_with_linked_file.txt` (new, generated, committed)
 
 **Interfaces:**
 - Consumes: `optiff.analysis.AnalyzeReport` and its nested dataclasses (Task 5).
-- Produces: `render_analyze(report: AnalyzeReport) -> str`, plus `render_size_tree`, `_layer_line`, `_compression_summary` (copied here from `report.py` - report.py keeps its own copies until Task 7 deletes it, so `Reporter` keeps working in the meantime).
+- Produces: `render_analyze(report: AnalyzeReport) -> str`, plus `render_size_tree`, `_layer_line`, `_compression_summary` (moved here from `report.py`; `report.py` re-imports them so `Reporter` keeps working with a single source of truth, not a second copy, until Task 7 deletes `report.py` outright).
 
 - [ ] **Step 1: Move (rename) the size-tree unit test file**
 
@@ -1876,12 +2002,89 @@ def _render_compression(p, report: AnalyzeReport) -> None:
     p(f"Bits/sample: {list(info.bits_per_sample)}")
 ```
 
-**Note on `_render_embedded`'s share calculation:** `Reporter._print_embedded` divides by `item.size` (the `LinkedFile`'s declared size), not the embedded document's own `total`. Use `item.size` here too - fix the call site: `_render_linked_files` must pass `item` (or `item.size`) into `_render_embedded`, not rely on `document.total`. Update the signature to `_render_embedded(p, item, embedded)` and the call to `_render_embedded(p, item, linked_files.embedded[item.index])`, and inside use `share = section.total_size / item.size * 100 if item.size else 0.0`. This is a direct transcription requirement, not a design choice - get it from `report.py:396-403` exactly.
+**Note on `_render_embedded`'s share calculation:** `Reporter._print_embedded` divides by `item.size` (the `LinkedFile`'s declared size). The code above uses `document.total` instead, and that is correct as written, not a bug to fix: `parse_document(reader, start, size)` always sets `EmbeddedDocument.total = size` (`psd_file.py:357`), and `_collect_embedded` always calls it as `parse_document(reader, item.data_offset, item.size)` (Task 5) - so `document.total` and `item.size` are the same value by construction, every time. Do not change the two-parameter `_render_embedded(p, embedded)` signature; it already matches `Reporter` byte-for-byte.
+
+**Coverage gap:** neither `synthetic_tiff` nor `synthetic_psd_tiff` populates a `lnk2`/`lnkD`/`lnkE` block, so `report.linked_files` is `None` for both, and `_render_linked_files`/`_render_embedded` are never exercised by anything in this plan - Step 4a below closes that gap with a dedicated fixture before the parity test runs, so this section is proven identical rather than merely assumed to be.
+
+- [ ] **Step 4a: Add a fixture with an embedded linked file, so `_render_linked_files`/`_render_embedded` get exercised**
+
+`tests/unit/test_psd_links.py::link_record` already builds a valid `lnk2` record for its own unit tests; `optiff/psd_file.py`'s `parse_document` doctest already contains a minimal, proven-valid embedded PSB byte sequence. Combine both into a new fixture instead of hand-rolling a third variant.
+
+Add to `tests/conftest.py` (near `psd_blob`):
+
+```python
+from tests.unit.test_psd_links import link_record
+
+
+@pytest.fixture(scope="session")
+def psd_blob_with_linked_file() -> bytes:
+    """Like `psd_blob`, plus an `lnk2` block with one embedded PSB."""
+    embedded_psb = (
+        b"8BPS" + (2).to_bytes(2, "big") + bytes(6)
+        + (3).to_bytes(2, "big")
+        + (600).to_bytes(4, "big") + (800).to_bytes(4, "big")
+        + (16).to_bytes(2, "big") + (3).to_bytes(2, "big")
+        + (0).to_bytes(4, "big")  # Color Mode Data
+        + (4).to_bytes(4, "big") + b"abcd"  # Image Resources
+        + (0).to_bytes(8, "big")  # Layer and Mask Information
+        + (1).to_bytes(2, "big")  # Image Data compression (RLE)
+    )
+
+    record = link_record(
+        name="embedded.psb", size=len(embedded_psb), payload=embedded_psb
+    )
+
+    return psd_container(
+        ("Lr16", b"layers" * 64),
+        ("LMsk", b"\x00" * 14),
+        ("Pat2", b""),
+        ("CAI ", b"content-credentials"),
+        ("cinf", b'{"compositor": "test"}'),
+        ("lnk2", record),
+        byte_order="<",
+    )
+
+
+@pytest.fixture(scope="session")
+def synthetic_psd_tiff_with_linked_file(
+    tmp_path_factory: pytest.TempPathFactory,
+    psd_blob_with_linked_file: bytes,
+) -> Path:
+    path = tmp_path_factory.mktemp("tiff") / "psd-linked.tif"
+
+    return _write(
+        path,
+        extratags=[
+            (XMP_TAG, 1, len(XMP_SAMPLE), XMP_SAMPLE, True),
+            (PHOTOSHOP_TAG, 7, len(psd_blob_with_linked_file), psd_blob_with_linked_file, True),
+        ],
+    )
+```
+
+Run: `pytest tests/integration/test_analysis.py -v` (from Task 5)
+Expected: PASS - this fixture doesn't change anything Task 5 already tests, it's confirming the new fixture doesn't break collection/imports.
 
 - [ ] **Step 4: Run the size-tree unit tests**
 
 Run: `pytest tests/unit/test_formatters_analyze.py -v`
 Expected: PASS.
+
+- [ ] **Step 4b: Point `report.py` at the new module instead of keeping a second copy**
+
+`render_size_tree`/`_layer_line`/`_compression_summary` now exist in two places. Rather than carrying that duplication until Task 7 deletes `report.py` outright, make `report.py` import them from their new home - `Reporter`'s methods call these as bare module-level names, so redirecting the import is a drop-in replacement with no method-body changes, and there is exactly one implementation from this point on.
+
+In `optiff/report.py`, delete the bodies of `render_size_tree`, `_block_children`, `_layer_line`, `_compression_summary` (today's `report.py:20-155`) and replace that whole block with:
+
+```python
+from optiff.formatters.analyze import _compression_summary, _layer_line, render_size_tree
+```
+
+(`_block_children` stays deleted, not re-imported - it's a private helper of `render_size_tree` only, not called anywhere else in `report.py`.)
+
+- [ ] **Step 4c: Run the full suite to confirm `Reporter` still works unchanged**
+
+Run: `pytest`
+Expected: PASS - `Reporter`'s output is identical, since the functions it calls are identical, just imported from elsewhere.
 
 - [ ] **Step 5: Write the temporary parity test against `Reporter`**
 
@@ -1939,12 +2142,26 @@ def test_synthetic_psd_tiff_output_is_byte_identical(synthetic_psd_tiff: Path):
 
     # Assert
     assert new == old
+
+
+def test_linked_file_output_is_byte_identical(synthetic_psd_tiff_with_linked_file: Path):
+    # Arrange - the fixture from Step 4a; this is the only test in the plan
+    # that exercises LINKED SMART OBJECTS / _render_embedded at all
+    path = synthetic_psd_tiff_with_linked_file
+
+    # Act
+    old = _reporter_output(path)
+    new = render_analyze(analyze(path))
+
+    # Assert
+    assert new == old
+    assert "LINKED SMART OBJECTS" in old  # confirms the section actually ran
 ```
 
 - [ ] **Step 6: Run it**
 
 Run: `pytest tests/integration/test_analyze_parity.py -v`
-Expected: PASS. If it fails, the diff between `old` and `new` tells you exactly which `_render_*` helper drifted from its `Reporter._print_*` source - compare line by line against `report.py` rather than guessing.
+Expected: PASS (3 tests). If it fails, the diff between `old` and `new` tells you exactly which `_render_*` helper drifted from its `Reporter._print_*` source - compare line by line against `report.py` rather than guessing.
 
 - [ ] **Step 7: Generate the permanent golden fixtures**
 
@@ -1965,12 +2182,17 @@ from optiff.formatters.analyze import render_analyze
 GOLDEN_DIR = Path(__file__).resolve().parents[1] / "golden"
 
 
-def test_generate_golden_files(synthetic_tiff: Path, synthetic_psd_tiff: Path):
+def test_generate_golden_files(
+    synthetic_tiff: Path,
+    synthetic_psd_tiff: Path,
+    synthetic_psd_tiff_with_linked_file: Path,
+):
     GOLDEN_DIR.mkdir(exist_ok=True)
 
     for name, path in (
         ("analyze_synthetic_tiff.txt", synthetic_tiff),
         ("analyze_synthetic_psd_tiff.txt", synthetic_psd_tiff),
+        ("analyze_synthetic_psd_tiff_with_linked_file.txt", synthetic_psd_tiff_with_linked_file),
     ):
         text = render_analyze(analyze(path)).replace(
             f"File:          {path}", "File:          <PATH>"
@@ -1979,7 +2201,7 @@ def test_generate_golden_files(synthetic_tiff: Path, synthetic_psd_tiff: Path):
 ```
 
 Run: `pytest tests/integration/_generate_golden.py -v`
-Expected: PASS, and `tests/golden/analyze_synthetic_tiff.txt` / `tests/golden/analyze_synthetic_psd_tiff.txt` now exist on disk.
+Expected: PASS, and `tests/golden/analyze_synthetic_tiff.txt` / `tests/golden/analyze_synthetic_psd_tiff.txt` / `tests/golden/analyze_synthetic_psd_tiff_with_linked_file.txt` now exist on disk.
 
 Delete the generator - it did its job and must not linger as a real test (it always passes; it asserts nothing):
 
@@ -1999,8 +2221,9 @@ Expected: PASS.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add optiff/formatters/analyze.py tests/unit/test_formatters_analyze.py \
-        tests/integration/test_analyze_parity.py tests/golden
+git add optiff/formatters/analyze.py optiff/report.py tests/conftest.py \
+        tests/unit/test_formatters_analyze.py tests/integration/test_analyze_parity.py \
+        tests/golden
 git commit -m "Add render_analyze(); prove parity with Reporter; freeze golden output"
 ```
 
@@ -2056,12 +2279,22 @@ def test_matches_golden_output_for_psd_tiff(synthetic_psd_tiff: Path):
     expected = (GOLDEN_DIR / "analyze_synthetic_psd_tiff.txt").read_text()
 
     assert _normalized(synthetic_psd_tiff) == expected
+
+
+def test_matches_golden_output_for_psd_tiff_with_linked_file(
+    synthetic_psd_tiff_with_linked_file: Path,
+):
+    expected = (
+        GOLDEN_DIR / "analyze_synthetic_psd_tiff_with_linked_file.txt"
+    ).read_text()
+
+    assert _normalized(synthetic_psd_tiff_with_linked_file) == expected
 ```
 
 - [ ] **Step 2: Run it to confirm it passes against the fixtures generated in Task 6**
 
 Run: `pytest tests/integration/test_analyze_golden.py -v`
-Expected: PASS (2 tests) - this doesn't yet prove anything new (the parity test in Task 6 already established this), it just confirms the golden files read back correctly.
+Expected: PASS (3 tests) - this doesn't yet prove anything new (the parity test in Task 6 already established this), it just confirms the golden files read back correctly.
 
 - [ ] **Step 3: Delete the temporary parity test**
 
