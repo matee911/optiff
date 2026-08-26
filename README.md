@@ -90,4 +90,22 @@ file names never reach the repository.
 
 ## Licence
 
-To be decided.
+Copyright (C) 2026 matee911
+
+**GNU General Public License v3.0 only** - see [`LICENSE`](LICENSE).
+
+That choice is deliberate rather than default. Anything built on this engine has
+to stay open, which keeps the work in the open where it belongs. The one party
+that is not bound by that is the copyright holder, which is what leaves room for
+a commercial licence later.
+
+For terms other than the GPL, open an issue.
+
+## Contributing
+
+Pull requests are welcome, and they need a one-line agreement to the Contributor
+Licence Agreement in [`CONTRIBUTING.md`](CONTRIBUTING.md). The reason is written
+out there rather than buried: the right to sublicense is what allows the same
+engine to exist under the GPL and under commercial terms at once. Contributions
+accepted here stay available under the GPL - that is a promise the document
+makes explicitly.

@@ -2,7 +2,12 @@
 name = "tiff-analyzer"
 version = "0.1.0"
 description = "Lossless recompression of layered TIFF files with Photoshop data"
+readme = "README.md"
 requires-python = ">=3.13"
+# "only", not "or-later": the terms stay the ones reviewed here. As sole
+# copyright holder the owner can always grant more, never less.
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
 dependencies = [
     "tifffile>=2024.1.30",
     "numpy",
