@@ -6,6 +6,22 @@ including the layers **inside embedded smart objects**.
 On a nine-file test set: **22 GB down to 10 GB (54%)**, and with
 `--zip-fallback` individual files reach **33% of the original**.
 
+## Status
+
+**Early development. Do not point this at files you cannot afford to lose.**
+
+The tool is built to be safe by construction, and the next section says how.
+But a design is not a promise. It has been exercised on a small set of real
+files and on a generated catalogue of the cases met so far, which is not the
+same as being proven against everything Photoshop can write.
+
+So: **keep your originals**, and check the results yourself before deleting
+anything. `tools/mask_check.py` compares two files through Photoshop, mask by
+mask, which is a stronger check than any this tool can run on itself.
+
+There is **no warranty of any kind, and no liability for lost or damaged
+files** - see sections 15 and 16 of the [licence](LICENSE).
+
 ## Principles
 
 - **The original is never touched.** The result is written alongside it under
