@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from optiff.cli import _duration, main
+from optiff.cli import main
+from optiff.formatters.optimize import _duration
 
 SECTIONS = [
     "SIZE TREE",
