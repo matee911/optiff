@@ -1,0 +1,48 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject.toml claims ">=3.13". Running both is what makes that
+        # claim true rather than aspirational.
+        python: ["3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - run: pip install -e ".[dev]"
+
+      # The same three checks pre-commit runs locally, in the same order.
+      - run: ruff format --check .
+      - run: ruff check .
+
+      # Point pyrefly at this interpreter explicitly. Left to itself it picks
+      # one off PATH, and checking against another version's standard library
+      # invents errors that have nothing to do with the code.
+      - run: pyrefly check --python-interpreter-path "$(which python)"
+
+      # The suite needs no sample files - it generates them.
+      - run: pytest
