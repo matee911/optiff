@@ -67,7 +67,7 @@ class Command(Protocol):
 ```
 
 `optiff/commands/analyze.py::AnalyzeCommand` — `run()` calls
-`optiff.analyze.analyze(args.path)` and returns an `AnalyzeReport`.
+`optiff.analysis.analyze(args.path)` and returns an `AnalyzeReport`.
 
 `optiff/commands/optimize.py::OptimizeCommand` — `run()` calls
 `optiff.optimize.optimize(args.path, args.out, level=..., verify=..., ...)` and
@@ -88,14 +88,29 @@ returns the existing `OptimizeResult`, unchanged.
 
 ### `AnalyzeReport` (new)
 
-New module `optiff/analyze.py`, mirroring the existing shape of
-`optiff/optimize.py` (a plain function returning a plain result object).
+New module `optiff/analysis.py` (not `analyze.py`: `optiff/__init__.py` already
+does `from optiff.cli import __version__, analyze`, re-exporting `analyze` as
+a package-level attribute; a submodule literally named `optiff/analyze.py`
+would collide with that attribute the moment it's imported, making
+`optiff.analyze` mean two different things depending on import order).
+`optiff/analysis.py` mirrors the existing shape of `optiff/optimize.py` (a
+plain function returning a plain result object).
+
+**Public API change:** `optiff/__init__.py` moves its re-export from
+`optiff.cli.analyze` (today: prints the full report, returns `None`) to
+`optiff.analysis.analyze` (returns an `AnalyzeReport`, prints nothing). Anyone
+using `optiff.analyze(path)` as a library call gets the report data now, not
+printed text - to print, call
+`optiff.formatters.analyze.render_analyze(optiff.analyze(path))`. This is a
+deliberate, breaking change to the public function's return type, consistent
+with the reporting/formatting split; called out explicitly rather than left
+implicit.
 
 ```python
 def analyze(path: Path) -> AnalyzeReport: ...
 ```
 
-Dataclasses (new, in `optiff/analyze.py` unless noted as already existing in
+Dataclasses (new, in `optiff/analysis.py` unless noted as already existing in
 `optiff/domain.py`):
 
 ```
@@ -182,12 +197,12 @@ optiff/
     base.py               # Command protocol
     analyze.py             # AnalyzeCommand
     optimize.py             # OptimizeCommand
-  analyze.py               # AnalyzeReport + analyze() (data only, no printing)
+  analysis.py              # AnalyzeReport + analyze() (data only, no printing)
   optimize.py               # OptimizeResult + optimize() (unchanged)
   formatters/
     analyze.py               # render_analyze() + moved rendering helpers
     optimize.py               # render_optimize() + moved _duration()
-  report.py                 # removed; contents absorbed into analyze.py / formatters/analyze.py
+  report.py                 # removed; contents absorbed into analysis.py / formatters/analyze.py
 ```
 
 ## Error handling / exit codes
@@ -275,7 +290,7 @@ Optionally, a `[![codecov]](...)` badge in `README.md` once that's done.
   invocations (verified by the golden-file test).
 - `cli.py` contains no report-building or data-reading logic — only argparse,
   dispatch, and exit-code mapping.
-- `report.py` is gone; its logic lives in `optiff/analyze.py` (data) and
+- `report.py` is gone; its logic lives in `optiff/analysis.py` (data) and
   `optiff/formatters/analyze.py` (rendering).
 - Adding a future subcommand (e.g. `--compatibility` from #10) requires only:
   a new `Command` subclass, a new result dataclass, a new formatter — no
