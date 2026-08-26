@@ -21,7 +21,9 @@ from optiff.storage import PhysicalClassifier, PhysicalStorageAnalyzer
 
 @dataclass(frozen=True)
 class ProvenanceSection:
-    """The three states `Reporter._print_provenance` distinguishes today."""
+    """The three states a provenance report can be in: no ImageSourceData
+    blocks at all, blocks present but no tag 37724, or a fully parsed
+    provenance record."""
 
     state: Literal["no-blocks", "no-tag", "found"]
     report: dict[str, str] | None  # set only when state == "found"
@@ -33,8 +35,8 @@ class LayersSection:
     The two "nothing here" states plus the found one.
 
     A bare `LayerStack | None` cannot tell "no tag 37724 at all" apart from
-    "the tag exists but has no Lr16/Lr32/Layr block" - the two messages
-    `Reporter._print_layers` prints are different.
+    "the tag exists but has no Lr16/Lr32/Layr block" - the two cases are
+    reported with different messages.
     """
 
     state: Literal["no-tag", "no-section", "found"]

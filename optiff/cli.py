@@ -11,6 +11,7 @@ import tifffile
 
 from optiff.analysis import AnalyzeReport
 from optiff.commands.analyze import AnalyzeCommand
+from optiff.commands.base import Command
 from optiff.commands.optimize import OptimizeCommand
 from optiff.formatters.analyze import render_analyze
 from optiff.formatters.optimize import render_optimize
@@ -25,7 +26,7 @@ EXIT_OK = 0
 EXIT_BAD_FILE = 2
 EXIT_VERIFY_FAILED = 3
 
-COMMANDS: tuple[object, ...] = (AnalyzeCommand(), OptimizeCommand())
+COMMANDS: tuple[Command, ...] = (AnalyzeCommand(), OptimizeCommand())
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,8 +43,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command_name", required=True)
 
+    help_text = {
+        "analyze": "analyze the physical byte layout of a TIFF",
+        "optimize": ("write an optimized copy of a TIFF, recompressing its layers"),
+    }
+
     for command in COMMANDS:
-        subparser = subparsers.add_parser(command.name)
+        subparser = subparsers.add_parser(command.name, help=help_text[command.name])
         command.add_arguments(subparser)
         subparser.set_defaults(command=command)
 

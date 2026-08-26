@@ -44,9 +44,11 @@ BSD-licensed.
 ## Usage
 
 ```bash
-python -m optiff FILE.tif                       # analysis only
-python -m optiff FILE.tif --optimize RESULT.tif # compress the layers
+python -m optiff analyze FILE.tif                        # analysis only
+python -m optiff optimize FILE.tif --out RESULT.tif       # compress the layers
 ```
+
+`optimize` also takes:
 
 | flag | default | what it does |
 |---|---|---|

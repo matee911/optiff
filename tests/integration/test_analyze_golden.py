@@ -21,13 +21,15 @@ def _normalized(path: Path) -> str:
 
 
 def test_matches_golden_output_for_plain_tiff(synthetic_tiff: Path):
-    expected = (GOLDEN_DIR / "analyze_synthetic_tiff.txt").read_text()
+    expected = (GOLDEN_DIR / "analyze_synthetic_tiff.txt").read_text(encoding="utf-8")
 
     assert _normalized(synthetic_tiff) == expected
 
 
 def test_matches_golden_output_for_psd_tiff(synthetic_psd_tiff: Path):
-    expected = (GOLDEN_DIR / "analyze_synthetic_psd_tiff.txt").read_text()
+    expected = (GOLDEN_DIR / "analyze_synthetic_psd_tiff.txt").read_text(
+        encoding="utf-8"
+    )
 
     assert _normalized(synthetic_psd_tiff) == expected
 
@@ -37,6 +39,6 @@ def test_matches_golden_output_for_psd_tiff_with_linked_file(
 ):
     expected = (
         GOLDEN_DIR / "analyze_synthetic_psd_tiff_with_linked_file.txt"
-    ).read_text()
+    ).read_text(encoding="utf-8")
 
     assert _normalized(synthetic_psd_tiff_with_linked_file) == expected
