@@ -70,7 +70,7 @@ Transparency:    no
 Channel data:    0.00 B
 Compression:     no channel data
 WARNING: records plus channels give 20 B, the section holds 384 B
-UWAGA: layer-record-failed @0x44 implausible channel count: 24940
+WARNING: layer-record-failed @0x44 implausible channel count: 24940
 
      NAME                                            SIZE        BOUNDS  COMPR  MODE
 --------------------------------------------------------------------------------

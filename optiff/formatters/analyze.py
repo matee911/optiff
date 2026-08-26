@@ -295,7 +295,7 @@ def _render_layers(p, report: AnalyzeReport) -> None:
         )
 
     for warning in stack.warnings:
-        p(f"UWAGA: {warning.code} @0x{warning.offset:X} {warning.detail}")
+        p(f"WARNING: {warning.code} @0x{warning.offset:X} {warning.detail}")
 
     p()
     p(f"{'':>3}  {'NAME':<40} {'SIZE':>11}  {'BOUNDS':>12}  {'COMPR':<6} MODE")
@@ -322,7 +322,7 @@ def _render_linked_files(p, report: AnalyzeReport) -> None:
     p(f"Embedded data:   {format_size(linked.embedded_bytes)}")
 
     for warning in linked.warnings:
-        p(f"UWAGA: {warning.code} @0x{warning.offset:X} {warning.detail}")
+        p(f"WARNING: {warning.code} @0x{warning.offset:X} {warning.detail}")
 
     p()
 
@@ -368,7 +368,7 @@ def _render_embedded(p, embedded) -> None:
         )
 
     for warning in document.warnings:
-        p(f"       UWAGA: {warning.code} {warning.detail}")
+        p(f"       WARNING: {warning.code} {warning.detail}")
 
     stack = document.layers
 
@@ -379,7 +379,7 @@ def _render_embedded(p, embedded) -> None:
     p(f"       compression: {_compression_summary(stack)}")
 
     for warning in stack.warnings:
-        p(f"       UWAGA: {warning.code} {warning.detail}")
+        p(f"       WARNING: {warning.code} {warning.detail}")
 
     for layer in stack.layers:
         p(f"       {layer.index:>3}. {_layer_line(layer)}")
