@@ -7,11 +7,6 @@ on:
   # Re-run the checks on demand, without having to invent a commit.
   workflow_dispatch:
 
-# A second push to the same branch makes the first run pointless.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
