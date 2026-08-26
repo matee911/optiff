@@ -137,6 +137,7 @@ class ProvenanceSection:
     state: Literal["no-blocks", "no-tag", "found"]
     report: dict[str, str] | None  # Provenance.report(), only when state == "found"
 
+
 @dataclass(frozen=True)
 class LayersSection:
     # Reporter._print_layers distinguishes two different "nothing here"
@@ -145,10 +146,12 @@ class LayersSection:
     state: Literal["no-tag", "no-section", "found"]
     stack: LayerStack | None  # only when state == "found"
 
+
 @dataclass(frozen=True)
 class GapClassification:
     gap: PhysicalRange
     classification: str  # PhysicalClassifier(...).classify(gap)
+
 
 @dataclass(frozen=True)
 class TagInfo:
@@ -158,6 +161,7 @@ class TagInfo:
     count: int
     size: int
 
+
 @dataclass(frozen=True)
 class EmbeddedDocumentSection:
     # one linked smart object's embedded PSD/PSB, recursively.
@@ -165,12 +169,13 @@ class EmbeddedDocumentSection:
     # depth/color_mode_name/compression_name/sections/layers/warnings as
     # properties - wrap it rather than re-declaring those fields here.
     name: str
-    error: str | None       # DocumentError message, if parse_document failed
-    document: EmbeddedDocument | None   # None when error is set
+    error: str | None  # DocumentError message, if parse_document failed
+    document: EmbeddedDocument | None  # None when error is set
+
 
 @dataclass(frozen=True)
 class LinkedFilesSection:
-    linked: LinkedFiles                          # already in psd_links.py
+    linked: LinkedFiles  # already in psd_links.py
     embedded: dict[int, EmbeddedDocumentSection]  # keyed by LinkedFile.index
 ```
 

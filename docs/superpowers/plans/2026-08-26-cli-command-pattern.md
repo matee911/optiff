@@ -170,7 +170,9 @@ def test_optimize_command_add_arguments_registers_path_and_out():
     assert args.no_verify is False
 
 
-def test_optimize_command_run_returns_optimize_result(tmp_path: Path, synthetic_psd_tiff: Path):
+def test_optimize_command_run_returns_optimize_result(
+    tmp_path: Path, synthetic_psd_tiff: Path
+):
     # Arrange
     parser = argparse.ArgumentParser()
     OptimizeCommand().add_arguments(parser)
@@ -1726,11 +1728,7 @@ def render_analyze(report: AnalyzeReport) -> str:
 
     p(f"File:          {report.path}")
 
-    p(
-        f"File size:     "
-        f"{format_size(report.file_size)} "
-        f"({report.file_size:,} bytes)"
-    )
+    p(f"File size:     {format_size(report.file_size)} ({report.file_size:,} bytes)")
 
     p(f"Format:        {'BigTIFF' if report.is_bigtiff else 'Classic TIFF'}")
     p(f"Byte order:    {report.byte_order}")
@@ -2020,12 +2018,17 @@ from tests.unit.test_psd_links import link_record
 def psd_blob_with_linked_file() -> bytes:
     """Like `psd_blob`, plus an `lnk2` block with one embedded PSB."""
     embedded_psb = (
-        b"8BPS" + (2).to_bytes(2, "big") + bytes(6)
+        b"8BPS"
+        + (2).to_bytes(2, "big")
+        + bytes(6)
         + (3).to_bytes(2, "big")
-        + (600).to_bytes(4, "big") + (800).to_bytes(4, "big")
-        + (16).to_bytes(2, "big") + (3).to_bytes(2, "big")
+        + (600).to_bytes(4, "big")
+        + (800).to_bytes(4, "big")
+        + (16).to_bytes(2, "big")
+        + (3).to_bytes(2, "big")
         + (0).to_bytes(4, "big")  # Color Mode Data
-        + (4).to_bytes(4, "big") + b"abcd"  # Image Resources
+        + (4).to_bytes(4, "big")
+        + b"abcd"  # Image Resources
         + (0).to_bytes(8, "big")  # Layer and Mask Information
         + (1).to_bytes(2, "big")  # Image Data compression (RLE)
     )
@@ -2056,7 +2059,13 @@ def synthetic_psd_tiff_with_linked_file(
         path,
         extratags=[
             (XMP_TAG, 1, len(XMP_SAMPLE), XMP_SAMPLE, True),
-            (PHOTOSHOP_TAG, 7, len(psd_blob_with_linked_file), psd_blob_with_linked_file, True),
+            (
+                PHOTOSHOP_TAG,
+                7,
+                len(psd_blob_with_linked_file),
+                psd_blob_with_linked_file,
+                True,
+            ),
         ],
     )
 ```
@@ -2076,7 +2085,11 @@ Expected: PASS.
 In `optiff/report.py`, delete the bodies of `render_size_tree`, `_block_children`, `_layer_line`, `_compression_summary` (today's `report.py:20-155`) and replace that whole block with:
 
 ```python
-from optiff.formatters.analyze import _compression_summary, _layer_line, render_size_tree
+from optiff.formatters.analyze import (
+    _compression_summary,
+    _layer_line,
+    render_size_tree,
+)
 ```
 
 (`_block_children` stays deleted, not re-imported - it's a private helper of `render_size_tree` only, not called anywhere else in `report.py`.)
@@ -2144,7 +2157,9 @@ def test_synthetic_psd_tiff_output_is_byte_identical(synthetic_psd_tiff: Path):
     assert new == old
 
 
-def test_linked_file_output_is_byte_identical(synthetic_psd_tiff_with_linked_file: Path):
+def test_linked_file_output_is_byte_identical(
+    synthetic_psd_tiff_with_linked_file: Path,
+):
     # Arrange - the fixture from Step 4a; this is the only test in the plan
     # that exercises LINKED SMART OBJECTS / _render_embedded at all
     path = synthetic_psd_tiff_with_linked_file
@@ -2192,7 +2207,10 @@ def test_generate_golden_files(
     for name, path in (
         ("analyze_synthetic_tiff.txt", synthetic_tiff),
         ("analyze_synthetic_psd_tiff.txt", synthetic_psd_tiff),
-        ("analyze_synthetic_psd_tiff_with_linked_file.txt", synthetic_psd_tiff_with_linked_file),
+        (
+            "analyze_synthetic_psd_tiff_with_linked_file.txt",
+            synthetic_psd_tiff_with_linked_file,
+        ),
     ):
         text = render_analyze(analyze(path)).replace(
             f"File:          {path}", "File:          <PATH>"
@@ -2266,7 +2284,9 @@ GOLDEN_DIR = Path(__file__).resolve().parents[1] / "golden"
 
 
 def _normalized(path: Path) -> str:
-    return render_analyze(analyze(path)).replace(f"File:          {path}", "File:          <PATH>")
+    return render_analyze(analyze(path)).replace(
+        f"File:          {path}", "File:          <PATH>"
+    )
 
 
 def test_matches_golden_output_for_plain_tiff(synthetic_tiff: Path):
