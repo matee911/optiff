@@ -6,15 +6,15 @@ import argparse
 import os
 import sys
 from importlib.metadata import PackageNotFoundError, version
-from pathlib import Path
 
 import tifffile
 
-from optiff.document import TiffDocument
+from optiff.analysis import AnalyzeReport
+from optiff.commands.analyze import AnalyzeCommand
+from optiff.commands.optimize import OptimizeCommand
+from optiff.formatters.analyze import render_analyze
 from optiff.formatters.optimize import render_optimize
 from optiff.optimize import OptimizeError, OptimizeResult
-from optiff.psd_analyzer import TiffPhotoshopAnalyzer
-from optiff.report import Reporter
 
 try:
     __version__ = version("optiff")
@@ -24,19 +24,6 @@ except PackageNotFoundError:  # pragma: no cover - running from a source tree
 EXIT_OK = 0
 EXIT_BAD_FILE = 2
 EXIT_VERIFY_FAILED = 3
-
-
-def analyze(path: Path) -> None:
-    with TiffDocument(path) as document:
-        photoshop = TiffPhotoshopAnalyzer().analyze(document)
-
-        Reporter(document, photoshop).print_report()
-
-
-from optiff.commands.analyze import (  # noqa: E402  - after analyze(), which it imports back
-    AnalyzeCommand,
-)
-from optiff.commands.optimize import OptimizeCommand  # noqa: E402
 
 COMMANDS: tuple[object, ...] = (AnalyzeCommand(), OptimizeCommand())
 
@@ -100,6 +87,9 @@ def _main(argv: list[str] | None = None) -> int:
             return EXIT_VERIFY_FAILED
 
         return EXIT_OK
+
+    if isinstance(result, AnalyzeReport):
+        sys.stdout.write(render_analyze(result))
 
     return EXIT_OK
 
