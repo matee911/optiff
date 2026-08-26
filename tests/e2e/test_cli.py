@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import optiff.cli as cli_module
 from optiff.cli import main
 from optiff.formatters.optimize import _duration
 
@@ -248,8 +249,6 @@ def test_pipes_into_grep_without_traceback(synthetic_psd_tiff: Path):
 
 def test_main_survives_broken_pipe(monkeypatch, synthetic_psd_tiff: Path):
     # Arrange
-    import optiff.cli as cli_module
-
     def _raise(argv):
         raise BrokenPipeError
 

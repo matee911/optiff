@@ -34,8 +34,8 @@ def render_optimize(result: OptimizeResult) -> str:
     """The optimization summary as text. No I/O, no exit-code decisions."""
     buf = io.StringIO()
 
-    def p(*args: object, **kwargs: object) -> None:
-        print(*args, file=buf, **kwargs)
+    def p(*args: object) -> None:
+        print(*args, file=buf)
 
     p("=" * WIDTH)
     p("OPTIMIZATION")

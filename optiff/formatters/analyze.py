@@ -153,8 +153,8 @@ def _compression_summary(stack: LayerStack) -> str:
 def render_analyze(report: AnalyzeReport) -> str:
     buf = io.StringIO()
 
-    def p(*args: object, **kwargs: object) -> None:
-        print(*args, file=buf, **kwargs)
+    def p(*args: object) -> None:
+        print(*args, file=buf)
 
     p("=" * WIDTH)
     p("TIFF STORAGE ANALYZER")
