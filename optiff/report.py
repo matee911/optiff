@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import tifffile
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.domain import DataBlock, ImageInfo, PhotoshopAnalysis
-from tiff_analyzer.metadata import MetadataAnalyzer
-from tiff_analyzer.provenance import read_provenance
-from tiff_analyzer.psd_file import DocumentError, parse_document
-from tiff_analyzer.psd_layers import Layer, read_layer_stack
-from tiff_analyzer.psd_links import read_linked_files
-from tiff_analyzer.storage import PhysicalClassifier, PhysicalStorageAnalyzer
-from tiff_analyzer.units import format_size
+from optiff.document import TiffDocument
+from optiff.domain import DataBlock, ImageInfo, PhotoshopAnalysis
+from optiff.metadata import MetadataAnalyzer
+from optiff.provenance import read_provenance
+from optiff.psd_file import DocumentError, parse_document
+from optiff.psd_layers import Layer, read_layer_stack
+from optiff.psd_links import read_linked_files
+from optiff.storage import PhysicalClassifier, PhysicalStorageAnalyzer
+from optiff.units import format_size
 
 WIDTH = 80
 
@@ -30,7 +30,7 @@ def render_size_tree(
     printed `└── TIFF tag` before further `├──` entries, which produced an
     inconsistent tree.
 
-    >>> from tiff_analyzer.domain import DataBlock, PhysicalRange
+    >>> from optiff.domain import DataBlock, PhysicalRange
     >>> blocks = [
     ...     DataBlock("XMP", 700, (PhysicalRange(0, 60),)),
     ...     DataBlock("ICC Profile", 34675, (PhysicalRange(60, 100),)),
@@ -127,7 +127,7 @@ def _compression_summary(stack) -> str:
     """
     How many channel bytes fall to each compression method.
 
-    >>> from tiff_analyzer.psd_layers import LayerChannel, LayerStack
+    >>> from optiff.psd_layers import LayerChannel, LayerStack
     >>> layer = Layer(
     ...     0, "x", 0, 0, 1, 1,
     ...     (LayerChannel(0, 1002, 0), LayerChannel(1, 502, 3)),

@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from tiff_analyzer.domain import PhotoshopAnalysis
-from tiff_analyzer.psd_analyzer import ImageSourceDataAnalyzer
-from tiff_analyzer.psd_descriptor import Descriptor, parse_block
-from tiff_analyzer.readers import ByteReader
+from optiff.domain import PhotoshopAnalysis
+from optiff.psd_analyzer import ImageSourceDataAnalyzer
+from optiff.psd_descriptor import Descriptor, parse_block
+from optiff.readers import ByteReader
 
 #: A signed C2PA manifest is at least a few kB (certificate chain).
 #: A `CAI ` block of a few dozen bytes is the marker alone, not a manifest.

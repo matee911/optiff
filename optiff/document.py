@@ -7,8 +7,8 @@ from typing import ClassVar
 
 import tifffile
 
-from tiff_analyzer.domain import ImageInfo, PhysicalRange
-from tiff_analyzer.readers import FileWindowReader
+from optiff.domain import ImageInfo, PhysicalRange
+from optiff.readers import FileWindowReader
 
 #: Fallback in case tifffile ever stops exposing `TiffTag.valuebytecount`.
 #: Keys are the type numbers from TIFF 6.0 / BigTIFF.

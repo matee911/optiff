@@ -25,10 +25,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from tiff_analyzer.domain import ParseWarning, PhotoshopAnalysis
-from tiff_analyzer.psd_descriptor import DescriptorError
-from tiff_analyzer.psd_descriptor import parse as parse_descriptor
-from tiff_analyzer.readers import ByteReader
+from optiff.domain import ParseWarning, PhotoshopAnalysis
+from optiff.psd_descriptor import DescriptorError
+from optiff.psd_descriptor import parse as parse_descriptor
+from optiff.readers import ByteReader
 
 #: Blocks that carry the list of linked objects.
 LINK_BLOCK_KEYS = ("lnk2", "lnkD", "lnk3", "lnkE")
@@ -249,7 +249,7 @@ def parse_links(reader: ByteReader, start: int, end: int) -> LinkedFiles:
     """
     Reads the list of linked files.
 
-    >>> from tiff_analyzer.readers import BytesReader
+    >>> from optiff.readers import BytesReader
     >>> body = (
     ...     b"DFil" + (7).to_bytes(4, "little")
     ...     + bytes([3]) + b"abc"

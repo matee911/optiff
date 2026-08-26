@@ -32,14 +32,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
-from tiff_analyzer.domain import (
+from optiff.domain import (
     ByteOrder,
     IntOrder,
     ParseWarning,
     PhotoshopAnalysis,
     int_order,
 )
-from tiff_analyzer.readers import ByteReader
+from optiff.readers import ByteReader
 
 #: Block keys carrying the layer name in Unicode.
 UNICODE_NAME_KEY = "luni"
@@ -682,7 +682,7 @@ def parse_layers(
     """
     Reads the layer stack out of an ``Lr16`` / ``Lr32`` / ``Layr`` section.
 
-    >>> from tiff_analyzer.readers import BytesReader
+    >>> from optiff.readers import BytesReader
     >>> record = (
     ...     (0).to_bytes(4, "little") + (0).to_bytes(4, "little")
     ...     + (10).to_bytes(4, "little") + (20).to_bytes(4, "little")

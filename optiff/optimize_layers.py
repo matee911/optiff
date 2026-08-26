@@ -22,8 +22,8 @@ import hashlib
 import zlib
 from dataclasses import dataclass, field
 
-from tiff_analyzer.domain import ByteOrder, IntOrder
-from tiff_analyzer.psd_codec import (
+from optiff.domain import ByteOrder, IntOrder
+from optiff.psd_codec import (
     RAW,
     ZIP,
     ZIP_PREDICTED,
@@ -32,9 +32,9 @@ from tiff_analyzer.psd_codec import (
     decode_channel,
     encode_channel,
 )
-from tiff_analyzer.psd_layers import Layer, LayerChannel, LayerStack
-from tiff_analyzer.readers import ByteReader
-from tiff_analyzer.segments import Copy, Literal, Segment
+from optiff.psd_layers import Layer, LayerChannel, LayerStack
+from optiff.readers import ByteReader
+from optiff.segments import Copy, Literal, Segment
 
 #: The compression-method header at the start of the channel data.
 HEADER = 2

@@ -17,8 +17,8 @@ not in the tag size (which can reach 2.7 GB).
 
 from __future__ import annotations
 
-from tiff_analyzer.domain import ByteOrder, ParseWarning, PhotoshopBlock
-from tiff_analyzer.readers import ByteReader
+from optiff.domain import ByteOrder, ParseWarning, PhotoshopBlock
+from optiff.readers import ByteReader
 
 #: on-disk signature -> (logical signature, byte order, length size, header size)
 LAYOUTS: dict[bytes, tuple[str, ByteOrder, int, int]] = {
@@ -155,7 +155,7 @@ def walk(
     and emits no warning at all - a property that doubles as a free
     consistency check and is asserted against production files.
 
-    >>> from tiff_analyzer.readers import BytesReader
+    >>> from optiff.readers import BytesReader
     >>> data = (
     ...     b"MIB8" + b"61rL" + (2).to_bytes(4, "little") + b"ab" + b"\\x00\\x00"
     ...     + b"MIB8" + b"fnic" + (1).to_bytes(4, "little") + b"x" + b"\\x00" * 3

@@ -19,8 +19,8 @@ from __future__ import annotations
 import zlib
 from dataclasses import dataclass, field
 
-from tiff_analyzer.document import DATATYPE_ITEMSIZE
-from tiff_analyzer.domain import IntOrder
+from optiff.document import DATATYPE_ITEMSIZE
+from optiff.domain import IntOrder
 
 #: Adobe Deflate: what Photoshop writes and all three applications read.
 ADOBE_DEFLATE = 8

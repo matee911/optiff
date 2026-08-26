@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from tiff_analyzer.provenance import (
+from optiff.provenance import (
     ContentCredentials,
     GenerativeInfo,
     _models,
     _version,
 )
-from tiff_analyzer.psd_descriptor import Descriptor
+from optiff.psd_descriptor import Descriptor
 
 # ============================================================================
 # CONTENT CREDENTIALS

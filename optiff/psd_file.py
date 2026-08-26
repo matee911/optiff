@@ -20,14 +20,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from tiff_analyzer.domain import ParseWarning
-from tiff_analyzer.psd_blocks import walk
-from tiff_analyzer.psd_layers import (
+from optiff.domain import ParseWarning
+from optiff.psd_blocks import walk
+from optiff.psd_layers import (
     LAYER_SECTION_KEYS,
     LayerStack,
     parse_layers,
 )
-from tiff_analyzer.readers import ByteReader
+from optiff.readers import ByteReader
 
 SIGNATURE = b"8BPS"
 
@@ -255,7 +255,7 @@ def parse_document(
     """
     Reads the structure of an embedded PSD/PSB file.
 
-    >>> from tiff_analyzer.readers import BytesReader
+    >>> from optiff.readers import BytesReader
     >>> header = (
     ...     b"8BPS" + (2).to_bytes(2, "big") + bytes(6)
     ...     + (3).to_bytes(2, "big")

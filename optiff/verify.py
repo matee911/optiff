@@ -13,19 +13,19 @@ import hashlib
 import zlib
 from dataclasses import dataclass
 
-from tiff_analyzer.domain import PhotoshopAnalysis
-from tiff_analyzer.optimize_layers import HEADER
-from tiff_analyzer.psd_codec import (
+from optiff.domain import PhotoshopAnalysis
+from optiff.optimize_layers import HEADER
+from optiff.psd_codec import (
     RAW,
     ZIP,
     ChannelGeometry,
     CodecError,
     decode_channel,
 )
-from tiff_analyzer.psd_file import DocumentError, parse_document
-from tiff_analyzer.psd_layers import LayerStack, read_layer_stack
-from tiff_analyzer.psd_links import read_linked_files
-from tiff_analyzer.readers import ByteReader
+from optiff.psd_file import DocumentError, parse_document
+from optiff.psd_layers import LayerStack, read_layer_stack
+from optiff.psd_links import read_linked_files
+from optiff.readers import ByteReader
 
 
 @dataclass(frozen=True)

@@ -14,20 +14,20 @@ import numpy as np
 import pytest
 import tifffile
 
-from tests.sample_files import ROWS, WIDTH
-from tests.unit.builders import psd_container
-from tiff_analyzer import optimize as optimize_module
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.optimize import (
+from optiff import optimize as optimize_module
+from optiff.document import TiffDocument
+from optiff.optimize import (
     OptimizeError,
     channel_digests_of,
     optimize,
     plan_file,
 )
-from tiff_analyzer.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
-from tiff_analyzer.psd_file import parse_document
-from tiff_analyzer.psd_links import parse_links, read_linked_files
-from tiff_analyzer.verify import channel_digests
+from optiff.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
+from optiff.psd_file import parse_document
+from optiff.psd_links import parse_links, read_linked_files
+from optiff.verify import channel_digests
+from tests.sample_files import ROWS, WIDTH
+from tests.unit.builders import psd_container
 
 
 @pytest.fixture

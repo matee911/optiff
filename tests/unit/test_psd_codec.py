@@ -7,7 +7,7 @@ import zlib
 import numpy as np
 import pytest
 
-from tiff_analyzer.psd_codec import (
+from optiff.psd_codec import (
     RAW,
     RLE,
     ZIP,

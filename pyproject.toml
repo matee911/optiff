@@ -1,5 +1,5 @@
 [project]
-name = "tiff-analyzer"
+name = "optiff"
 version = "0.1.0"
 description = "Lossless recompression of layered TIFF files with Photoshop data"
 readme = "README.md"
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tiff-analyzer = "tiff_analyzer.cli:main"
+optiff = "optiff.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -29,11 +29,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["tiff_analyzer"]
+packages = ["optiff"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = ["tests", "tiff_analyzer"]
+testpaths = ["tests", "optiff"]
 addopts = [
     "-ra",
     "--strict-markers",
@@ -67,8 +67,8 @@ ignore = [
 "tests/*" = ["ARG", "S101"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["tiff_analyzer"]
+known-first-party = ["optiff"]
 
 [tool.pyrefly]
-project-includes = ["tiff_analyzer", "tests", "tools"]
+project-includes = ["optiff", "tests", "tools"]
 python-version = "3.13"

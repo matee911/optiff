@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tiff_analyzer.cli import _duration, main
+from optiff.cli import _duration, main
 
 SECTIONS = [
     "SIZE TREE",
@@ -23,7 +23,7 @@ SECTIONS = [
 
 def run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "tiff_analyzer", *args],
+        [sys.executable, "-m", "optiff", *args],
         capture_output=True,
         text=True,
         timeout=120,
@@ -101,7 +101,7 @@ def test_version_flag():
 
     # Assert
     assert result.returncode == 0
-    assert re.match(r"tiff-analyzer \d+\.\d+", result.stdout.strip())
+    assert re.match(r"optiff \d+\.\d+", result.stdout.strip())
 
 
 def test_main_is_callable_in_process(synthetic_psd_tiff: Path, capsys):

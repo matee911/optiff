@@ -9,14 +9,14 @@ from pathlib import Path
 
 import tifffile
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.optimize import OptimizeError, OptimizeResult, optimize
-from tiff_analyzer.psd_analyzer import TiffPhotoshopAnalyzer
-from tiff_analyzer.report import WIDTH, Reporter
-from tiff_analyzer.units import format_size
+from optiff.document import TiffDocument
+from optiff.optimize import OptimizeError, OptimizeResult, optimize
+from optiff.psd_analyzer import TiffPhotoshopAnalyzer
+from optiff.report import WIDTH, Reporter
+from optiff.units import format_size
 
 try:
-    __version__ = version("tiff-analyzer")
+    __version__ = version("optiff")
 except PackageNotFoundError:  # pragma: no cover - running from a source tree
     __version__ = "0.1.0+dev"
 
@@ -153,7 +153,7 @@ def print_optimize(result: OptimizeResult) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="tiff-analyzer",
+        prog="optiff",
         description="Analyses the physical byte layout of a TIFF and its metadata.",
     )
 

@@ -14,17 +14,17 @@ from pathlib import Path
 
 import pytest
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
-from tiff_analyzer.psd_codec import (
+from optiff.document import TiffDocument
+from optiff.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
+from optiff.psd_codec import (
     ZIP_PREDICTED,
     ChannelGeometry,
     decode_channel,
     encode_channel,
 )
-from tiff_analyzer.psd_file import parse_document
-from tiff_analyzer.psd_layers import read_layer_stack
-from tiff_analyzer.psd_links import read_linked_files
+from optiff.psd_file import parse_document
+from optiff.psd_layers import read_layer_stack
+from optiff.psd_links import read_linked_files
 
 #: How many channels to check; each one is tens of MB.
 CHANNEL_LIMIT = 3

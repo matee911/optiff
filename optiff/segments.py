@@ -17,7 +17,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import BinaryIO, Union
 
-from tiff_analyzer.readers import ByteReader
+from optiff.readers import ByteReader
 
 #: How many bytes to copy at a time while streaming.
 CHUNK = 4 * 1024 * 1024
@@ -142,7 +142,7 @@ def write_plan(plan: Plan, reader: ByteReader, output: BinaryIO) -> int:
     Writes the plan to a stream and returns the number of bytes written.
 
     >>> import io
-    >>> from tiff_analyzer.readers import BytesReader
+    >>> from optiff.readers import BytesReader
     >>> source = BytesReader(b"0123456789")
     >>> out = io.BytesIO()
     >>> write_plan([Copy(0, 3), Literal(b"XY"), Copy(8, 2)], source, out)
@@ -179,7 +179,7 @@ def materialise(plan: Plan, reader: ByteReader) -> bytes:
     """
     Returns the plan as bytes. Small structures and tests only.
 
-    >>> from tiff_analyzer.readers import BytesReader
+    >>> from optiff.readers import BytesReader
     >>> materialise([Copy(2, 3), Literal(b"!")], BytesReader(b"abcdef"))
     b'cde!'
     """

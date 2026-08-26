@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.domain import DataBlock, PhysicalRange
-from tiff_analyzer.units import calculate_entropy
+from optiff.document import TiffDocument
+from optiff.domain import DataBlock, PhysicalRange
+from optiff.units import calculate_entropy
 
 
 def merge_ranges(ranges: list[PhysicalRange]) -> list[PhysicalRange]:

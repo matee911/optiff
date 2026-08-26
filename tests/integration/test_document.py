@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tiff_analyzer.document import TiffDocument
+from optiff.document import TiffDocument
 
 PHOTOSHOP_TAG = 37724
 XMP_TAG = 700

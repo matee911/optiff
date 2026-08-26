@@ -28,8 +28,8 @@ BSD-licensed.
 ## Usage
 
 ```bash
-python -m tiff_analyzer FILE.tif                       # analysis only
-python -m tiff_analyzer FILE.tif --optimize RESULT.tif # compress the layers
+python -m optiff FILE.tif                       # analysis only
+python -m optiff FILE.tif --optimize RESULT.tif # compress the layers
 ```
 
 | flag | default | what it does |

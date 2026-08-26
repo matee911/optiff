@@ -13,12 +13,12 @@ from pathlib import Path
 
 import pytest
 
+from optiff.document import TiffDocument
+from optiff.optimize import OptimizeError, optimize
+from optiff.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
+from optiff.psd_codec import RAW, RLE, ZIP_PREDICTED, decode_channel
+from optiff.psd_layers import read_layer_stack
 from tests.sample_files import CASES, GEOMETRY, build
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.optimize import OptimizeError, optimize
-from tiff_analyzer.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
-from tiff_analyzer.psd_codec import RAW, RLE, ZIP_PREDICTED, decode_channel
-from tiff_analyzer.psd_layers import read_layer_stack
 
 #: Cases the optimizer is expected to refuse outright.
 REFUSED = {"photoshop-not-last", "no-photoshop"}

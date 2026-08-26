@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tiff_analyzer.verify import ChannelDigest, compare
+from optiff.verify import ChannelDigest, compare
 
 
 def digest(

@@ -20,17 +20,17 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tiff_analyzer.document import TiffDocument
-from tiff_analyzer.optimize_image import (
+from optiff.document import TiffDocument
+from optiff.optimize_image import (
     ImageDataError,
     ImagePlan,
     plan_image_data,
     shift_patches,
 )
-from tiff_analyzer.optimize_psd import plan_container
-from tiff_analyzer.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
-from tiff_analyzer.readers import FileWindowReader
-from tiff_analyzer.segments import (
+from optiff.optimize_psd import plan_container
+from optiff.psd_analyzer import ImageSourceDataAnalyzer, TiffPhotoshopAnalyzer
+from optiff.readers import FileWindowReader
+from optiff.segments import (
     Copy,
     Literal,
     Segment,
@@ -39,7 +39,7 @@ from tiff_analyzer.segments import (
     total_size,
     write_plan,
 )
-from tiff_analyzer.verify import ChannelDigest, Comparison, channel_digests, compare
+from optiff.verify import ChannelDigest, Comparison, channel_digests, compare
 
 PHOTOSHOP_TAG = 37724
 

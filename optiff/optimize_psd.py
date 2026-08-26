@@ -16,21 +16,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from tiff_analyzer.domain import ByteOrder, PhotoshopAnalysis, PhotoshopBlock
-from tiff_analyzer.optimize_layers import (
+from optiff.domain import ByteOrder, PhotoshopAnalysis, PhotoshopBlock
+from optiff.optimize_layers import (
     DEFAULT_SOURCES,
     ChannelResult,
     LayerSectionPlan,
     plan_layer_section,
 )
-from tiff_analyzer.psd_analyzer import CONTAINER_HEADER_SIZE
-from tiff_analyzer.psd_blocks import align4, walk
-from tiff_analyzer.psd_codec import ZIP_PREDICTED
-from tiff_analyzer.psd_file import DocumentError, parse_document
-from tiff_analyzer.psd_layers import LAYER_SECTION_KEYS, parse_layers
-from tiff_analyzer.psd_links import LINK_BLOCK_KEYS, parse_links
-from tiff_analyzer.readers import ByteReader
-from tiff_analyzer.segments import Copy, Literal, Segment, total_size
+from optiff.psd_analyzer import CONTAINER_HEADER_SIZE
+from optiff.psd_blocks import align4, walk
+from optiff.psd_codec import ZIP_PREDICTED
+from optiff.psd_file import DocumentError, parse_document
+from optiff.psd_layers import LAYER_SECTION_KEYS, parse_layers
+from optiff.psd_links import LINK_BLOCK_KEYS, parse_links
+from optiff.readers import ByteReader
+from optiff.segments import Copy, Literal, Segment, total_size
 
 
 @dataclass
