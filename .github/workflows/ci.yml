@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Re-run the checks on demand, without having to invent a commit.
+  workflow_dispatch:
 
 # A second push to the same branch makes the first run pointless.
 concurrency:
@@ -26,12 +28,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Nothing here pushes, so the token has no reason to sit in
+          # .git/config where a later step could pick it up.
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
 
       - run: pip install -e ".[dev]"
 
