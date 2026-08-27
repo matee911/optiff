@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
 import pytest
 
 from tools.benchmark import (
@@ -17,6 +18,7 @@ from tools.benchmark import (
     _format_seconds,
     _scale,
     grain_inversion,
+    mixed,
     render_svg,
     sweep,
     whole_file_curiosity,
@@ -129,6 +131,28 @@ def test_format_bytes(size, expected):
 )
 def test_format_seconds(seconds, expected):
     assert _format_seconds(seconds) == expected
+
+
+def test_mixed_is_deterministic():
+    assert mixed(1, **SIZE) == mixed(1, **SIZE)
+    assert mixed(1, **SIZE) != mixed(2, **SIZE)
+
+
+def test_mixed_alternates_flat_and_textured_bands():
+    # Arrange - the property that makes `mixed` useful for this chart isn't
+    # visible in overall compressed size at unit-test scale (it only shows
+    # up as a real level-vs-level trade-off at DEFAULT_WIDTH/ROWS - see the
+    # module docstring), so this checks the generator's actual mechanism
+    # instead: alternating bands, one near-constant, the next varying a lot.
+    width, rows = 64, 64
+    data = mixed(1, width=width, rows=rows)
+    pixels = np.frombuffer(data, dtype=">u2").reshape(rows, width)
+    band = max(rows // 64, 1)
+    flat_band_std = pixels[0:band].astype("int64").std()
+    textured_band_std = pixels[band : 2 * band].astype("int64").std()
+
+    # Assert
+    assert flat_band_std < textured_band_std
 
 
 def test_whole_file_curiosity_reports_raw_and_zlib_and_lzma():

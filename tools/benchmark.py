@@ -29,6 +29,8 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from tests.realistic_file import REFERENCE_ROWS, REFERENCE_WIDTH
 from tests.realistic_file import build as build_realistic_file
 from tests.sample_files import CONTENT_PROFILES
@@ -38,19 +40,28 @@ try:
 except ImportError:
     zstandard = None
 
-#: 16384 x 16384 x 2 bytes = 512 MB per channel raw - a real multi-layer,
-#: multi-channel file totalling ~2 GB (AFFINITY_NOTES.md's scale) is many
-#: channels this size, not one channel that size. Large enough to reproduce
-#: the level 3/4 size inversion and the level 4-5 time jump seen there;
-#: neither shows reliably at a few hundred kilobytes.
-DEFAULT_WIDTH, DEFAULT_ROWS = 16384, 16384
+#: 7360 x 4912, 3:2 - the shape and pixel count (36.2 MP) of a single
+#: channel from a real full-frame sensor in the 26-45 MP range this tool
+#: targets, not an arbitrary square blown up to get enough compute time. A
+#: real multi-layer file gets its size from many channels this size, not
+#: one channel inflated past what any sensor produces (the earlier
+#: 16384x16384 default was 268 MP - larger than any consumer camera).
+DEFAULT_WIDTH, DEFAULT_ROWS = 7360, 4912
 
 #: `flat` and `banded` compress to a few hundred KB regardless of channel
-#: size - correct (that is their whole point), but next to smooth/detail/
+#: size - correct (that is their whole point), but next to mixed/detail/
 #: grain's tens-to-hundreds of megabytes they're a dot, not a line worth a
 #: place on this chart. `tests/sample_files.py` keeps all five; the trade-off
 #: chart only needs the profiles that actually trade something off.
-BENCHMARK_PROFILES = ("smooth", "grain", "detail")
+#:
+#: `smooth` is dropped in favor of `mixed`: a single-texture random walk
+#: barely varies in size across levels 1-9 (a percent or two - real photo
+#: content mixes plenty of near-flat regions with textured ones, which is
+#: what actually makes higher levels worth anything). `mixed`, defined
+#: below, is local to this chart rather than `tests/sample_files.py`'s
+#: registry - it exists to make this trade-off visible, not as a general
+#: content profile other tests build on.
+BENCHMARK_PROFILES = ("mixed", "grain", "detail")
 
 LEVELS = range(1, 10)
 
@@ -61,7 +72,7 @@ SEED = 1
 #: Colors, one per name in BENCHMARK_PROFILES.
 _PALETTE = {
     "light": {
-        "smooth": "#2563eb",
+        "mixed": "#2563eb",
         "grain": "#dc2626",
         "detail": "#d97706",
         "text": "#1f2937",
@@ -69,7 +80,7 @@ _PALETTE = {
         "background": "#ffffff",
     },
     "dark": {
-        "smooth": "#60a5fa",
+        "mixed": "#60a5fa",
         "grain": "#f87171",
         "detail": "#fbbf24",
         "text": "#e5e7eb",
@@ -77,6 +88,39 @@ _PALETTE = {
         "background": "#111827",
     },
 }
+
+
+def mixed(seed: int, *, width: int, rows: int) -> bytes:
+    """
+    Alternating horizontal bands: near-constant, then a random walk, repeat.
+
+    Real images mix regions like this - sky next to foliage, a wall next to
+    a face - and it's that mix, not any single texture, that gives deflate's
+    higher levels something worth the extra search: plenty of near-matches
+    across bands to chase, not just one uniform statistical process. A
+    single-texture profile (`tests/sample_files.py`'s `smooth`/`detail`)
+    barely varies in size across levels 1-9; this does.
+    """
+    band = max(rows // 64, 1)
+    rng = np.random.default_rng(seed)
+    canvas = np.zeros((rows, width), dtype=np.int64)
+
+    for y0 in range(0, rows, band):
+        y1 = min(y0 + band, rows)
+        if (y0 // band) % 2 == 0:
+            base = int(rng.integers(0, 65536))
+            canvas[y0:y1] = base + rng.integers(-20, 21, size=(y1 - y0, width))
+        else:
+            canvas[y0:y1] = np.cumsum(
+                rng.integers(-40, 41, size=(y1 - y0, width)), axis=1
+            )
+
+    return (canvas % 65536).astype(">u2").tobytes()
+
+
+#: `sweep()`'s content source: `tests/sample_files.py`'s registry, plus
+#: `mixed`, which lives here rather than there (see `BENCHMARK_PROFILES`).
+_PROFILES = {**CONTENT_PROFILES, "mixed": mixed}
 
 
 @dataclass(frozen=True)
@@ -109,7 +153,7 @@ def sweep(*, width: int, rows: int, repeats: int) -> dict[str, list[LevelResult]
     results: dict[str, list[LevelResult]] = {}
 
     for name in BENCHMARK_PROFILES:
-        data = CONTENT_PROFILES[name](SEED, width=width, rows=rows)
+        data = _PROFILES[name](SEED, width=width, rows=rows)
         results[name] = [_median_compress(data, level, repeats) for level in LEVELS]
 
     return results
