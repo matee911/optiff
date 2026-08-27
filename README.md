@@ -118,24 +118,25 @@ file names never reach the repository.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/levels-dark.svg">
-  <img src="docs/levels.svg" alt="Deflate level vs. compressed size and time, one line per content profile">
+  <img src="docs/levels.svg" alt="Deflate level vs. compressed size and time, one line per content category">
 </picture>
 
-Time on x, compressed size on y, one point per deflate level (1-9), one line
-per content profile - `mixed` (bands of near-constant and textured content,
-the way a real photo mixes a sky with a face), `grain` and `detail` (see
-`tests/sample_files.py`). Measured on a single 7360x4912 channel (3:2, 36 MP
-- one channel from a real full-frame sensor, not an arbitrary size). Reproduce
-it with `python -m tools.benchmark`.
+Time on x, compressed size on y, one point per deflate level (1-9). Not one
+line per isolated synthetic profile - one line per **content category in
+`tests/realistic_file.py`'s manifest** (`photographic`, `detail`, `flat`),
+every RAW channel of that category summed together. This is the file the
+54%/33% headline figures describe, at the canvas it's modeled on, actually
+swept across levels - not a disconnected stand-in. Reproduce it with
+`python -m tools.benchmark --scale 1.0` (the default `--scale` is smaller,
+for a fast local run; the committed chart above was generated at `1.0`, the
+full reference canvas).
 
-This is measured on **generated** content, not the nine real files behind the
-54%/33% figures above - those two claims stay deliberately apart, and the
-**level 4 recommendation above comes from that separate real-file
-measurement, not from this chart**. A single content profile turned out not
-to move much across levels 1-9 at all (a percent or two) - `mixed` is what
-actually shows a level trade-off worth looking at: the best size lands around
-level 3-4, levels 5-6 cost more time for a *worse* result, and it takes until
-level 9 to recover the level-3 size, at several times the time cost.
+This is measured on **generated** content, not the nine real files
+themselves - those stay a separate, real-file-only claim - but the shape and
+content mix here is calibrated against that same survey, not invented.
+Levels 5-6 are a real trap in this data: worse *and* slower than level 3-4,
+recovering only by level 9, at several times the time cost - consistent
+with, though not the source of, the level 4 default above.
 
 ## Documentation
 

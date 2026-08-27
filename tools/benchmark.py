@@ -1,12 +1,17 @@
 """
-Sweeps deflate levels 1-9 across every content profile and charts the trade-off.
+Sweeps deflate levels 1-9 across a realistic file's channels, charts the trade-off.
 
-Why: the samples come from `tests/sample_files.py`, so this benchmark ships
-with the repository instead of depending on files nobody else has. The
-question a reader has is "what does the extra time buy me?" - a trade-off,
-not a time series - so the chart is time on x, size on y, one point per
-level, one line per content profile. Never dual-axis: two scales on one plot
-invite exactly the misreading this is meant to prevent.
+Why: this has to measure what deflate actually costs and saves on a file
+shaped like a real production TIFF - not an isolated synthetic content
+profile, which is a different, easier question with a different answer.
+`tests/realistic_file.py`'s manifest (structure + content calibrated
+against a real-file survey - see its module docstring) is the input; every
+RAW channel in it is grouped by content category (photographic, detail,
+flat) and swept together, so each line is "if this file's photographic
+channels alone were deflated at level N, here's the total size and time" -
+the question a reader actually has ("what does the extra time buy me?"),
+not a time series. Never dual-axis: two scales on one plot invite exactly
+the misreading this is meant to prevent.
 
 Repeats separate a real level 3/4 inversion from noise, so a median of
 several runs is reported rather than a single timing. CI does not run this:
@@ -29,60 +34,49 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-
-from tests.realistic_file import REFERENCE_ROWS, REFERENCE_WIDTH
+from optiff.psd_codec import RAW
+from tests.realistic_file import REFERENCE_ROWS, REFERENCE_WIDTH, build_manifest
 from tests.realistic_file import build as build_realistic_file
-from tests.sample_files import CONTENT_PROFILES
+from tests.sample_files import grain as _grain_profile
 
 try:
     import zstandard  # pyrefly: ignore[missing-import]  - optional, curiosity only
 except ImportError:
     zstandard = None
 
-#: 7360 x 4912, 3:2 - the shape and pixel count (36.2 MP) of a single
-#: channel from a real full-frame sensor in the 26-45 MP range this tool
-#: targets, not an arbitrary square blown up to get enough compute time. A
-#: real multi-layer file gets its size from many channels this size, not
-#: one channel inflated past what any sensor produces (the earlier
-#: 16384x16384 default was 268 MP - larger than any consumer camera).
-DEFAULT_WIDTH, DEFAULT_ROWS = 7360, 4912
-
-#: `flat` and `banded` compress to a few hundred KB regardless of channel
-#: size - correct (that is their whole point), but next to mixed/detail/
-#: grain's tens-to-hundreds of megabytes they're a dot, not a line worth a
-#: place on this chart. `tests/sample_files.py` keeps all five; the trade-off
-#: chart only needs the profiles that actually trade something off.
-#:
-#: `smooth` is dropped in favor of `mixed`: a single-texture random walk
-#: barely varies in size across levels 1-9 (a percent or two - real photo
-#: content mixes plenty of near-flat regions with textured ones, which is
-#: what actually makes higher levels worth anything). `mixed`, defined
-#: below, is local to this chart rather than `tests/sample_files.py`'s
-#: registry - it exists to make this trade-off visible, not as a general
-#: content profile other tests build on.
-BENCHMARK_PROFILES = ("mixed", "grain", "detail")
+#: `sweep()`'s scale, same knob as `tests.realistic_file` - 1.0 is the
+#: reference canvas (~2.3-2.8 GB, matching AFFINITY_NOTES.md's real files).
+#: Default is smaller so a run finishes in a couple of minutes; the
+#: committed chart is regenerated at a larger scale deliberately (see the
+#: commit that added it), not left at this default.
+DEFAULT_SCALE = 0.25
 
 LEVELS = range(1, 10)
 
-#: The seed every profile is generated with - one content sample per profile,
-#: reused across every level so only the level varies.
-SEED = 1
+#: Every RAW channel in `tests.realistic_file`'s manifest, grouped by which
+#: content profile built it (its layer name's first word - "Photo 0" ->
+#: "photographic", etc.) - the categories the content survey measured.
+_CATEGORY_BY_PREFIX = {
+    "Photo": "photographic",
+    "Detail": "detail",
+}
 
-#: Colors, one per name in BENCHMARK_PROFILES.
+#: Display order and palette for the chart's lines.
+CHART_CATEGORIES = ("photographic", "detail", "flat")
+
 _PALETTE = {
     "light": {
-        "mixed": "#2563eb",
-        "grain": "#dc2626",
+        "photographic": "#2563eb",
         "detail": "#d97706",
+        "flat": "#16a34a",
         "text": "#1f2937",
         "grid": "#d1d5db",
         "background": "#ffffff",
     },
     "dark": {
-        "mixed": "#60a5fa",
-        "grain": "#f87171",
+        "photographic": "#60a5fa",
         "detail": "#fbbf24",
+        "flat": "#4ade80",
         "text": "#e5e7eb",
         "grid": "#374151",
         "background": "#111827",
@@ -90,73 +84,62 @@ _PALETTE = {
 }
 
 
-def mixed(seed: int, *, width: int, rows: int) -> bytes:
-    """
-    Alternating horizontal bands: near-constant, then a random walk, repeat.
-
-    Real images mix regions like this - sky next to foliage, a wall next to
-    a face - and it's that mix, not any single texture, that gives deflate's
-    higher levels something worth the extra search: plenty of near-matches
-    across bands to chase, not just one uniform statistical process. A
-    single-texture profile (`tests/sample_files.py`'s `smooth`/`detail`)
-    barely varies in size across levels 1-9; this does.
-    """
-    band = max(rows // 64, 1)
-    rng = np.random.default_rng(seed)
-    canvas = np.zeros((rows, width), dtype=np.int64)
-
-    for y0 in range(0, rows, band):
-        y1 = min(y0 + band, rows)
-        if (y0 // band) % 2 == 0:
-            base = int(rng.integers(0, 65536))
-            canvas[y0:y1] = base + rng.integers(-20, 21, size=(y1 - y0, width))
-        else:
-            canvas[y0:y1] = np.cumsum(
-                rng.integers(-40, 41, size=(y1 - y0, width)), axis=1
-            )
-
-    return (canvas % 65536).astype(">u2").tobytes()
-
-
-#: `sweep()`'s content source: `tests/sample_files.py`'s registry, plus
-#: `mixed`, which lives here rather than there (see `BENCHMARK_PROFILES`).
-_PROFILES = {**CONTENT_PROFILES, "mixed": mixed}
-
-
 @dataclass(frozen=True)
 class LevelResult:
-    """One (profile, level)'s measured trade-off."""
+    """One (category, level)'s measured trade-off, summed across its channels."""
 
     level: int
     size: int
     seconds: float
 
 
-def _median_compress(data: bytes, level: int, repeats: int) -> LevelResult:
-    """Compresses `data` at `level` `repeats` times; reports the median time."""
+def _category(layer_name: str) -> str:
+    """Which chart line a layer's channels belong to."""
+    return _CATEGORY_BY_PREFIX.get(layer_name.split(maxsplit=1)[0], "flat")
+
+
+def _grouped_channels(width: int, rows: int) -> dict[str, list[bytes]]:
+    """Every RAW channel's raw pixel bytes from the manifest, by category."""
+    groups: dict[str, list[bytes]] = {name: [] for name in CHART_CATEGORIES}
+
+    for layer in build_manifest(width, rows):
+        category = _category(layer.name)
+
+        for channel in layer.channels:
+            if channel.method == RAW:
+                groups[category].append(channel.data)
+
+    return groups
+
+
+def _median_compress_group(
+    chunks: list[bytes], level: int, repeats: int
+) -> LevelResult:
+    """Compresses every chunk in `chunks` at `level`, `repeats` times, and
+    sums the sizes - the total this category's channels cost at this level."""
     timings = []
-    size = None
+    size = 0
 
     for _ in range(repeats):
         start = time.perf_counter()
-        compressed = zlib.compress(data, level)
+        size = sum(len(zlib.compress(chunk, level)) for chunk in chunks)
         timings.append(time.perf_counter() - start)
-        size = len(compressed)
-
-    assert size is not None
 
     return LevelResult(level=level, size=size, seconds=statistics.median(timings))
 
 
 def sweep(*, width: int, rows: int, repeats: int) -> dict[str, list[LevelResult]]:
-    """`BENCHMARK_PROFILES`, swept across every deflate level."""
-    results: dict[str, list[LevelResult]] = {}
+    """
+    Every RAW channel of `tests.realistic_file.build_manifest(width, rows)`,
+    grouped by content category and swept across every deflate level.
+    """
+    groups = _grouped_channels(width, rows)
 
-    for name in BENCHMARK_PROFILES:
-        data = _PROFILES[name](SEED, width=width, rows=rows)
-        results[name] = [_median_compress(data, level, repeats) for level in LEVELS]
-
-    return results
+    return {
+        category: [_median_compress_group(chunks, level, repeats) for level in LEVELS]
+        for category, chunks in groups.items()
+        if chunks
+    }
 
 
 def grain_inversion(results: list[LevelResult]) -> str:
@@ -174,6 +157,19 @@ def grain_inversion(results: list[LevelResult]) -> str:
         f"{verdict}: level 4 ({four.size:,} B) {comparison} "
         f"level 3 ({three.size:,} B) on grain"
     )
+
+
+def grain_credibility_check(*, width: int, rows: int, repeats: int) -> str:
+    """
+    A side check, not one of the chart's lines: `tests.sample_files.grain`
+    is pure independent noise, not part of the realistic file's content
+    mix, but it's the profile the level 3/4 inversion was first observed on
+    - worth reporting on its own regardless of what the chart shows.
+    """
+    data = _grain_profile(1, width=width, rows=rows)
+    results = [_median_compress_group([data], level, repeats) for level in LEVELS]
+
+    return grain_inversion(results)
 
 
 def _format_table(results: dict[str, list[LevelResult]]) -> str:
@@ -210,15 +206,15 @@ def _format_seconds(t: float) -> str:
 
 def render_svg(results: dict[str, list[LevelResult]], *, theme: str) -> str:
     """
-    One SVG: time on x, size on y (log scale), one polyline per profile.
+    One SVG: time on x, size on y (log scale), one polyline per category.
 
-    Content profiles span orders of magnitude in compressed size (a `flat`
-    channel and a `grain` channel of the same pixel count can differ by
-    100x), so a linear size axis flattens every profile but the largest
-    into an invisible line hugging the bottom. Log scale is still one axis,
-    one unit - not the dual-axis trade-off this chart deliberately avoids -
-    it just lets each profile's own level-to-level movement be seen
-    regardless of its absolute size.
+    Categories differ by a lot in total payload (`flat` compresses to
+    almost nothing; `photographic`/`detail` carry most of a file's bytes),
+    so a linear size axis flattens the smaller lines into invisible marks
+    hugging the bottom. Log scale is still one axis, one unit - not the
+    dual-axis trade-off this chart deliberately avoids - it just lets each
+    category's own level-to-level movement be seen regardless of its
+    absolute size.
     """
     colors = _PALETTE[theme]
     width, height = 720, 440
@@ -346,11 +342,20 @@ def whole_file_curiosity(data: bytes) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="benchmark",
-        description="Sweeps deflate levels across content profiles and charts it.",
+        description=(
+            "Sweeps deflate levels across a realistic file's channels and charts it."
+        ),
     )
     parser.add_argument("--out", type=Path, default=Path("docs/levels.svg"))
-    parser.add_argument("--width", type=int, default=DEFAULT_WIDTH)
-    parser.add_argument("--rows", type=int, default=DEFAULT_ROWS)
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=DEFAULT_SCALE,
+        help=(
+            "multiplies tests.realistic_file's reference canvas "
+            f"({REFERENCE_WIDTH}x{REFERENCE_ROWS}); 1.0 reproduces it (~2.3-2.8 GB)"
+        ),
+    )
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument(
         "--whole-file-scale",
@@ -365,11 +370,16 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    width = max(round(REFERENCE_WIDTH * args.scale), 8)
+    rows = max(round(REFERENCE_ROWS * args.scale), 8)
 
-    results = sweep(width=args.width, rows=args.rows, repeats=args.repeats)
+    results = sweep(width=width, rows=rows, repeats=args.repeats)
 
     print(_format_table(results))
-    print(f"\ngrain level 3/4 inversion: {grain_inversion(results['grain'])}")
+    print(
+        "\ngrain level 3/4 inversion: "
+        + grain_credibility_check(width=width, rows=rows, repeats=args.repeats)
+    )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render_svg(results, theme="light"))
@@ -380,11 +390,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nwrote {args.out} and {dark_out}")
 
     if args.whole_file_scale is not None:
-        width = max(round(REFERENCE_WIDTH * args.whole_file_scale), 8)
-        rows = max(round(REFERENCE_ROWS * args.whole_file_scale), 8)
+        wf_width = max(round(REFERENCE_WIDTH * args.whole_file_scale), 8)
+        wf_rows = max(round(REFERENCE_ROWS * args.whole_file_scale), 8)
         scale = args.whole_file_scale
         print(f"\nwhole-file curiosity (scale={scale}, no longer openable):")
-        print(whole_file_curiosity(build_realistic_file(width, rows)))
+        print(whole_file_curiosity(build_realistic_file(wf_width, wf_rows)))
 
     return 0
 

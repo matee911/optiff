@@ -8,17 +8,18 @@ from __future__ import annotations
 
 import re
 
-import numpy as np
 import pytest
 
 from tools.benchmark import (
-    BENCHMARK_PROFILES,
+    CHART_CATEGORIES,
     LevelResult,
+    _category,
     _format_bytes,
     _format_seconds,
+    _grouped_channels,
     _scale,
+    grain_credibility_check,
     grain_inversion,
-    mixed,
     render_svg,
     sweep,
     whole_file_curiosity,
@@ -27,12 +28,39 @@ from tools.benchmark import (
 SIZE = {"width": 32, "rows": 32}
 
 
-def test_sweep_covers_every_profile_and_level():
+@pytest.mark.parametrize(
+    ("layer_name", "expected"),
+    [
+        ("Photo 0", "photographic"),
+        ("Detail 3", "detail"),
+        ("Flat 1", "flat"),
+        ("Adjustment 2", "flat"),
+        ("Low variation", "flat"),
+        ("Empty mask 41", "flat"),
+    ],
+)
+def test_category_maps_layer_names(layer_name, expected):
+    assert _category(layer_name) == expected
+
+
+def test_grouped_channels_covers_every_category_with_raw_data():
+    # Act
+    groups = _grouped_channels(**SIZE)
+
+    # Assert
+    assert set(groups) == set(CHART_CATEGORIES)
+    assert all(chunks for chunks in groups.values())
+    assert all(
+        isinstance(chunk, bytes) for chunks in groups.values() for chunk in chunks
+    )
+
+
+def test_sweep_covers_every_category_and_level():
     # Act
     results = sweep(**SIZE, repeats=1)
 
     # Assert
-    assert set(results) == set(BENCHMARK_PROFILES)
+    assert set(results) <= set(CHART_CATEGORIES)
     assert all(len(levels) == 9 for levels in results.values())
     assert all(
         [r.level for r in levels] == list(range(1, 10)) for levels in results.values()
@@ -72,6 +100,14 @@ def test_grain_inversion_detects_level_4_larger_than_3(
     assert message.startswith("reproduced") is expect_reproduced
 
 
+def test_grain_credibility_check_reports_a_verdict():
+    # Act
+    message = grain_credibility_check(**SIZE, repeats=1)
+
+    # Assert
+    assert message.startswith(("reproduced", "not reproduced"))
+
+
 def test_scale_maps_the_range_linearly():
     assert _scale(5, 0, 10, 0, 100) == pytest.approx(50)
     assert _scale(0, 0, 10, 0, 100) == pytest.approx(0)
@@ -95,9 +131,9 @@ def test_render_svg_is_well_formed_and_theme_specific():
     for svg in (light, dark):
         assert svg.startswith("<svg")
         assert svg.rstrip().endswith("</svg>")
-        # one polyline per content profile
+        # one polyline per chart category
         assert len(re.findall(r"<polyline", svg)) == len(results)
-        # one labelled point per (profile, level)
+        # one labelled point per (category, level)
         expected_points = sum(len(levels) for levels in results.values())
         assert len(re.findall(r"<circle", svg)) == expected_points + len(results)
         # 5 y-axis size ticks + 5 x-axis time ticks
@@ -131,28 +167,6 @@ def test_format_bytes(size, expected):
 )
 def test_format_seconds(seconds, expected):
     assert _format_seconds(seconds) == expected
-
-
-def test_mixed_is_deterministic():
-    assert mixed(1, **SIZE) == mixed(1, **SIZE)
-    assert mixed(1, **SIZE) != mixed(2, **SIZE)
-
-
-def test_mixed_alternates_flat_and_textured_bands():
-    # Arrange - the property that makes `mixed` useful for this chart isn't
-    # visible in overall compressed size at unit-test scale (it only shows
-    # up as a real level-vs-level trade-off at DEFAULT_WIDTH/ROWS - see the
-    # module docstring), so this checks the generator's actual mechanism
-    # instead: alternating bands, one near-constant, the next varying a lot.
-    width, rows = 64, 64
-    data = mixed(1, width=width, rows=rows)
-    pixels = np.frombuffer(data, dtype=">u2").reshape(rows, width)
-    band = max(rows // 64, 1)
-    flat_band_std = pixels[0:band].astype("int64").std()
-    textured_band_std = pixels[band : 2 * band].astype("int64").std()
-
-    # Assert
-    assert flat_band_std < textured_band_std
 
 
 def test_whole_file_curiosity_reports_raw_and_zlib_and_lzma():
