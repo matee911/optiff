@@ -122,13 +122,20 @@ file names never reach the repository.
 </picture>
 
 Time on x, compressed size on y, one point per deflate level (1-9), one line
-per synthetic content profile (`smooth`, `grain`, `flat`, `detail`, `banded` -
-see `tests/sample_files.py`). Reproduce it with `python -m tools.benchmark`.
+per content profile - `mixed` (bands of near-constant and textured content,
+the way a real photo mixes a sky with a face), `grain` and `detail` (see
+`tests/sample_files.py`). Measured on a single 7360x4912 channel (3:2, 36 MP
+- one channel from a real full-frame sensor, not an arbitrary size). Reproduce
+it with `python -m tools.benchmark`.
 
 This is measured on **generated** content, not the nine real files behind the
-54%/33% figures above - those two claims stay deliberately apart. What this
-chart is for: seeing *where* the size/time trade-off bends, independent of
-any one archive's mixture of content.
+54%/33% figures above - those two claims stay deliberately apart, and the
+**level 4 recommendation above comes from that separate real-file
+measurement, not from this chart**. A single content profile turned out not
+to move much across levels 1-9 at all (a percent or two) - `mixed` is what
+actually shows a level trade-off worth looking at: the best size lands around
+level 3-4, levels 5-6 cost more time for a *worse* result, and it takes until
+level 9 to recover the level-3 size, at several times the time cost.
 
 ## Documentation
 
