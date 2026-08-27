@@ -11,6 +11,7 @@ import re
 import pytest
 
 from tools.benchmark import (
+    BENCHMARK_PROFILES,
     LevelResult,
     _format_bytes,
     _format_seconds,
@@ -18,6 +19,7 @@ from tools.benchmark import (
     grain_inversion,
     render_svg,
     sweep,
+    whole_file_curiosity,
 )
 
 SIZE = {"width": 32, "rows": 32}
@@ -28,7 +30,7 @@ def test_sweep_covers_every_profile_and_level():
     results = sweep(**SIZE, repeats=1)
 
     # Assert
-    assert set(results) == {"smooth", "grain", "flat", "detail", "banded"}
+    assert set(results) == set(BENCHMARK_PROFILES)
     assert all(len(levels) == 9 for levels in results.values())
     assert all(
         [r.level for r in levels] == list(range(1, 10)) for levels in results.values()
@@ -127,3 +129,17 @@ def test_format_bytes(size, expected):
 )
 def test_format_seconds(seconds, expected):
     assert _format_seconds(seconds) == expected
+
+
+def test_whole_file_curiosity_reports_raw_and_zlib_and_lzma():
+    # Arrange - repeated bytes so every compressor has something to do
+    data = (b"abcdefgh" * 1000) + bytes(500)
+
+    # Act
+    report = whole_file_curiosity(data)
+
+    # Assert - always present, regardless of whether zstd is installed
+    assert "raw" in report
+    assert str(len(data)) in report.replace(",", "")
+    assert "zlib" in report
+    assert "lzma" in report

@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import lzma
 import math
 import statistics
 import sys
@@ -28,14 +29,28 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from tests.realistic_file import REFERENCE_ROWS, REFERENCE_WIDTH
+from tests.realistic_file import build as build_realistic_file
 from tests.sample_files import CONTENT_PROFILES
 
-#: 8192 x 8192 x 2 bytes = 128 MB per channel raw - a real multi-layer,
+try:
+    import zstandard
+except ImportError:
+    zstandard = None
+
+#: 16384 x 16384 x 2 bytes = 512 MB per channel raw - a real multi-layer,
 #: multi-channel file totalling ~2 GB (AFFINITY_NOTES.md's scale) is many
 #: channels this size, not one channel that size. Large enough to reproduce
 #: the level 3/4 size inversion and the level 4-5 time jump seen there;
 #: neither shows reliably at a few hundred kilobytes.
-DEFAULT_WIDTH, DEFAULT_ROWS = 8192, 8192
+DEFAULT_WIDTH, DEFAULT_ROWS = 16384, 16384
+
+#: `flat` and `banded` compress to a few hundred KB regardless of channel
+#: size - correct (that is their whole point), but next to smooth/detail/
+#: grain's tens-to-hundreds of megabytes they're a dot, not a line worth a
+#: place on this chart. `tests/sample_files.py` keeps all five; the trade-off
+#: chart only needs the profiles that actually trade something off.
+BENCHMARK_PROFILES = ("smooth", "grain", "detail")
 
 LEVELS = range(1, 10)
 
@@ -43,14 +58,12 @@ LEVELS = range(1, 10)
 #: reused across every level so only the level varies.
 SEED = 1
 
-#: Colors, in the order CONTENT_PROFILES iterates (dict insertion order).
+#: Colors, one per name in BENCHMARK_PROFILES.
 _PALETTE = {
     "light": {
         "smooth": "#2563eb",
         "grain": "#dc2626",
-        "flat": "#16a34a",
         "detail": "#d97706",
-        "banded": "#7c3aed",
         "text": "#1f2937",
         "grid": "#d1d5db",
         "background": "#ffffff",
@@ -58,9 +71,7 @@ _PALETTE = {
     "dark": {
         "smooth": "#60a5fa",
         "grain": "#f87171",
-        "flat": "#4ade80",
         "detail": "#fbbf24",
-        "banded": "#a78bfa",
         "text": "#e5e7eb",
         "grid": "#374151",
         "background": "#111827",
@@ -94,11 +105,11 @@ def _median_compress(data: bytes, level: int, repeats: int) -> LevelResult:
 
 
 def sweep(*, width: int, rows: int, repeats: int) -> dict[str, list[LevelResult]]:
-    """Every content profile, swept across every deflate level."""
+    """`BENCHMARK_PROFILES`, swept across every deflate level."""
     results: dict[str, list[LevelResult]] = {}
 
-    for name, profile in CONTENT_PROFILES.items():
-        data = profile(SEED, width=width, rows=rows)
+    for name in BENCHMARK_PROFILES:
+        data = CONTENT_PROFILES[name](SEED, width=width, rows=rows)
         results[name] = [_median_compress(data, level, repeats) for level in LEVELS]
 
     return results
@@ -261,6 +272,33 @@ def render_svg(results: dict[str, list[LevelResult]], *, theme: str) -> str:
     return "\n".join(parts)
 
 
+def whole_file_curiosity(data: bytes) -> str:
+    """
+    Out of curiosity only: what a general-purpose compressor gets on the
+    WHOLE file, ignoring that the result would no longer be a TIFF Photoshop,
+    Affinity, Capture One or Lightroom could open - deflate only ever touches
+    individual channels, never the container. Not a recommendation, not part
+    of the sanity check - just a number for comparison.
+    """
+    lines = [f"raw                 {len(data):>14,} B"]
+
+    zlib_size = len(zlib.compress(data, 9))
+    lines.append(f"zlib (level 9)      {zlib_size:>14,} B  {zlib_size / len(data):.1%}")
+
+    lzma_size = len(lzma.compress(data, preset=9))
+    lines.append(f"lzma (preset 9)     {lzma_size:>14,} B  {lzma_size / len(data):.1%}")
+
+    if zstandard is None:
+        lines.append("zstd                not installed (pip install zstandard)")
+    else:
+        zstd_size = len(zstandard.ZstdCompressor(level=19).compress(data))
+        lines.append(
+            f"zstd (level 19)     {zstd_size:>14,} B  {zstd_size / len(data):.1%}"
+        )
+
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="benchmark",
@@ -270,6 +308,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--width", type=int, default=DEFAULT_WIDTH)
     parser.add_argument("--rows", type=int, default=DEFAULT_ROWS)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument(
+        "--whole-file-scale",
+        type=float,
+        default=None,
+        help=(
+            "out of curiosity only: also build tests.realistic_file at this "
+            "--scale and report lzma/zstd on the WHOLE file (not per-channel "
+            "deflate) - the result would no longer open in Photoshop/Affinity/"
+            "Capture One/Lightroom, so this is a curiosity, not a recommendation"
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -285,6 +334,13 @@ def main(argv: list[str] | None = None) -> int:
     dark_out.write_text(render_svg(results, theme="dark"))
 
     print(f"\nwrote {args.out} and {dark_out}")
+
+    if args.whole_file_scale is not None:
+        width = max(round(REFERENCE_WIDTH * args.whole_file_scale), 8)
+        rows = max(round(REFERENCE_ROWS * args.whole_file_scale), 8)
+        scale = args.whole_file_scale
+        print(f"\nwhole-file curiosity (scale={scale}, no longer openable):")
+        print(whole_file_curiosity(build_realistic_file(width, rows)))
 
     return 0
 
