@@ -27,7 +27,7 @@ from __future__ import annotations
 import argparse
 import sys
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -109,16 +109,24 @@ def _encode(pixels: bytes, method: int, *, width: int) -> bytes:
 
 @dataclass(frozen=True)
 class _Channel:
-    """One channel's content and how it's stored."""
+    """
+    One channel's content and how it's stored.
+
+    `encoded` is computed once, here, rather than on each access - for the
+    `ZIP_PREDICTED` channels that means one `zlib.compress` per channel, not
+    one per place the manifest is walked (size estimate, then the write).
+    """
 
     channel_id: int
     data: bytes
     width: int
     method: int = RAW
+    encoded: bytes = field(init=False)
 
-    @property
-    def encoded(self) -> bytes:
-        return _encode(self.data, self.method, width=self.width)
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "encoded", _encode(self.data, self.method, width=self.width)
+        )
 
 
 @dataclass(frozen=True)
@@ -162,12 +170,13 @@ def _masked_layer(name: str, profile, seed: int, *, width: int, rows: int) -> _L
 
 def build_manifest(width: int, rows: int) -> list[_Layer]:
     """
-    The layer/channel plan, scaled from the reference recipe:
-
-    ~38 full-canvas channels (93% of bytes), ~6 part-canvas (6.5%), ~70
-    near-empty masks (~0%, but half the channel count) - and, of the
-    full-canvas ones, roughly 29% of total payload has no readable geometry
-    (adjustment-layer masks sized like real content, not like real masks).
+    The layer/channel plan, shaped after the reference recipe: most bytes
+    come from a modest number of full-canvas channels, a large share of the
+    remaining channels are near-empty masks contributing almost no bytes,
+    and - the finding that matters for `--zip-fallback` - some of the
+    full-canvas payload itself is delivered as mask-shaped, unreadable-
+    geometry channels rather than as real masks. Exact per-category counts
+    live in the loops below, not restated here.
     """
     layers: list[_Layer] = []
 
@@ -273,22 +282,30 @@ def _embedded_smart_object(seed: int) -> bytes:
     return link_record_with_psb(inner)
 
 
-def estimated_size(width: int, rows: int) -> int:
-    """The approximate byte count `build` will produce for `width`/`rows`."""
-    manifest = build_manifest(width, rows)
+def _size_from_manifest(
+    manifest: list[_Layer], smart_object: bytes, *, width: int, rows: int
+) -> int:
     payload = sum(
         len(channel.encoded) for layer in manifest for channel in layer.channels
     )
-    smart_object = len(_embedded_smart_object(1))
     image = width * rows * 3 * BPP
 
-    return payload + smart_object + image + 4096  # +headers, roughly
+    return payload + len(smart_object) + image + 4096  # +headers, roughly
 
 
-def build(width: int, rows: int) -> bytes:
-    """The whole file, in memory - see the module docstring for the shape."""
+def estimated_size(width: int, rows: int) -> int:
+    """The approximate byte count `build` will produce for `width`/`rows`."""
     manifest = build_manifest(width, rows)
 
+    return _size_from_manifest(
+        manifest, _embedded_smart_object(1), width=width, rows=rows
+    )
+
+
+def _assemble(
+    manifest: list[_Layer], smart_object: bytes, *, width: int, rows: int
+) -> bytes:
+    """The whole file, in memory, from an already-built manifest."""
     records = [
         layer_record(
             name=layer.name,
@@ -302,14 +319,42 @@ def build(width: int, rows: int) -> bytes:
     )
 
     return build_tiff(
-        psd_container(("Lr16", section), ("lnk2", _embedded_smart_object(1))),
+        psd_container(("Lr16", section), ("lnk2", smart_object)),
         width=width,
         height=rows,
     )
 
 
-def write(path: Path, *, width: int, rows: int) -> Path:
-    path.write_bytes(build(width, rows))
+def build(width: int, rows: int) -> bytes:
+    """
+    The whole file, in memory - see the module docstring for the shape.
+
+    Not streamed: individual channels top out around 60 MB at the full
+    reference scale, so building each one fully is fine, but the final
+    concatenation (`bytes` + `bytes`) means peak memory runs to a few times
+    the output size, not just the output size itself. Acceptable for a
+    one-off generation (a few seconds of extra copying at 2.8 GB); a
+    genuinely streamed writer, in the style of `tests/sample_files.py`'s
+    `--scale`, would be the fix if this needs to scale further.
+    """
+    return _assemble(
+        build_manifest(width, rows), _embedded_smart_object(1), width=width, rows=rows
+    )
+
+
+def write(
+    path: Path,
+    *,
+    width: int,
+    rows: int,
+    manifest: list[_Layer] | None = None,
+    smart_object: bytes | None = None,
+) -> Path:
+    manifest = manifest if manifest is not None else build_manifest(width, rows)
+    smart_object = (
+        smart_object if smart_object is not None else _embedded_smart_object(1)
+    )
+    path.write_bytes(_assemble(manifest, smart_object, width=width, rows=rows))
 
     return path
 
@@ -368,7 +413,11 @@ def main(argv: list[str] | None = None) -> int:
     width = max(round(REFERENCE_WIDTH * args.scale), 8)
     rows = max(round(REFERENCE_ROWS * args.scale), 8)
 
-    size = estimated_size(width, rows)
+    # Built once, here - the size estimate and the write share it instead of
+    # each generating and compressing every channel from scratch.
+    manifest = build_manifest(width, rows)
+    smart_object = _embedded_smart_object(1)
+    size = _size_from_manifest(manifest, smart_object, width=width, rows=rows)
     print(f"estimated size: {size:,} B")
 
     if size > SIZE_WARN_BYTES and not args.yes:
@@ -378,7 +427,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     args.path.parent.mkdir(parents=True, exist_ok=True)
-    write(args.path, width=width, rows=rows)
+    write(
+        args.path, width=width, rows=rows, manifest=manifest, smart_object=smart_object
+    )
     print(f"wrote {args.path} ({args.path.stat().st_size:,} B)")
 
     return 0
