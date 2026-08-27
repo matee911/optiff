@@ -34,7 +34,7 @@ from tests.realistic_file import build as build_realistic_file
 from tests.sample_files import CONTENT_PROFILES
 
 try:
-    import zstandard
+    import zstandard  # pyrefly: ignore[missing-import]  - optional, curiosity only
 except ImportError:
     zstandard = None
 
