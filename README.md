@@ -10,6 +10,8 @@ including the layers **inside embedded smart objects**.
 On a nine-file test set: **22 GB down to 10 GB (54%)**, and with
 `--zip-fallback` individual files reach **33% of the original**.
 
+![Amelka Choco0400 benchmark](Amelka%20Choco0400_benchmark.png)
+
 ## Status
 
 **Early development. Do not point this at files you cannot afford to lose.**
