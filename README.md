@@ -68,6 +68,7 @@ python -m optiff optimize FILE.tif --out RESULT.tif       # compress the layers
 | `tools/mask_check.py` | compares two files through Photoshop, mask by mask |
 | `tools/verify_in_photoshop.jsx` | checks a whole batch of source/result pairs |
 | `tools/affinity_bisect.py` | builds variants of one file at chosen tag sizes |
+| `tools/benchmark.py` | sweeps deflate levels 1-9 over `tests/realistic_file.py`'s channels and writes an SVG chart of size vs. time - no results committed or endorsed here; run it and read its own output |
 
 ## Development
 
