@@ -157,9 +157,9 @@ def render_hw_info(hw: dict[str, str], out: TextIO = sys.stdout) -> None:
 @dataclass
 class LevelResult:
     level: int
-    size_after: int       # bytes that would be written
-    tag_after: int        # tag 37724 after compression
-    image_after: int      # flattened pixels after compression (0 = not packed)
+    size_after: int  # bytes that would be written
+    tag_after: int  # tag 37724 after compression
+    image_after: int  # flattened pixels after compression (0 = not packed)
     seconds: float
     image_data: bool = False
     zip_fallback: bool = False
@@ -174,8 +174,8 @@ class LevelResult:
 class FileReport:
     path: Path
     size_before: int
-    tag_before: int         # tag 37724 raw
-    image_before: int       # flattened pixels raw
+    tag_before: int  # tag 37724 raw
+    image_before: int  # flattened pixels raw
     results: list[LevelResult] = field(default_factory=list)
 
     @property
@@ -261,7 +261,7 @@ def benchmark_file(
     zip_fallback: bool = True,
     verbose: bool = False,
 ) -> FileReport:
-    print('benchmark_file')
+    print("benchmark_file")
     size_before = path.stat().st_size
 
     # We need tag_before / image_before - do a single dry run at level 1
@@ -277,8 +277,12 @@ def benchmark_file(
         )
         report.results.append(
             LevelResult(
-                level=1, size_after=0, tag_after=0, image_after=0,
-                seconds=0.0, error=str(exc)
+                level=1,
+                size_after=0,
+                tag_after=0,
+                image_after=0,
+                seconds=0.0,
+                error=str(exc),
             )
         )
         return report
@@ -297,22 +301,35 @@ def benchmark_file(
     # --- Level 4 + --image-data ---
     if image_data:
         _run_variant(
-            report, path, 4, image_data=True,
-            label="level 4 + --image-data", verbose=verbose,
+            report,
+            path,
+            4,
+            image_data=True,
+            label="level 4 + --image-data",
+            verbose=verbose,
         )
 
     # --- Level 4 + --zip-fallback ---
     if zip_fallback:
         _run_variant(
-            report, path, 4, zip_fallback=True,
-            label="level 4 + --zip-fallback", verbose=verbose,
+            report,
+            path,
+            4,
+            zip_fallback=True,
+            label="level 4 + --zip-fallback",
+            verbose=verbose,
         )
 
     # --- Level 4 + both ---
     if image_data and zip_fallback:
         _run_variant(
-            report, path, 4, image_data=True, zip_fallback=True,
-            label="level 4 + --image-data + --zip-fallback", verbose=verbose,
+            report,
+            path,
+            4,
+            image_data=True,
+            zip_fallback=True,
+            label="level 4 + --image-data + --zip-fallback",
+            verbose=verbose,
         )
 
     return report
@@ -370,7 +387,7 @@ def render_report(report: FileReport, out: TextIO = sys.stdout) -> None:
         f"  {'label':<34} {'size':>10}  {'saved':>10}  {'time':>6}",
         file=out,
     )
-    print(f"  {'-'*34} {'-'*10}  {'-'*10}  {'-'*6}", file=out)
+    print(f"  {'-' * 34} {'-' * 10}  {'-' * 10}  {'-' * 6}", file=out)
 
     base_ref = report.baseline
 
@@ -393,10 +410,7 @@ def render_report(report: FileReport, out: TextIO = sys.stdout) -> None:
             if delta != 0:
                 sign = "+" if delta > 0 else ""
                 pct_delta = delta / base_ref.size_after * 100
-                extra = (
-                    f"   vs base: {sign}{_fmt_size(abs(delta))}"
-                    f" ({pct_delta:+.1f}%)"
-                )
+                extra = f"   vs base: {sign}{_fmt_size(abs(delta))} ({pct_delta:+.1f}%)"
 
         row = (
             f"  {_label(r):<34} {size_str:>10}"
@@ -418,38 +432,54 @@ def render_csv(
     hw = hw or {}
     with csv_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "file", "size_before_b", "tag_before_b",
-            "level", "image_data", "zip_fallback",
-            "size_after_b", "tag_after_b", "image_after_b",
-            "saved_b", "pct_saved", "seconds",
-            "cpu", "cpu_cores", "ram_gb", "os", "python",
-        ])
+        writer.writerow(
+            [
+                "file",
+                "size_before_b",
+                "tag_before_b",
+                "level",
+                "image_data",
+                "zip_fallback",
+                "size_after_b",
+                "tag_after_b",
+                "image_after_b",
+                "saved_b",
+                "pct_saved",
+                "seconds",
+                "cpu",
+                "cpu_cores",
+                "ram_gb",
+                "os",
+                "python",
+            ]
+        )
         for report in reports:
             for r in report.results:
                 if not r.ok:
                     continue
                 saved = report.size_before - r.size_after
                 pct = (saved / report.size_before * 100) if report.size_before else 0.0
-                writer.writerow([
-                    report.path.name,
-                    report.size_before,
-                    report.tag_before,
-                    r.level,
-                    int(r.image_data),
-                    int(r.zip_fallback),
-                    r.size_after,
-                    r.tag_after,
-                    r.image_after,
-                    saved,
-                    f"{pct:.2f}",
-                    f"{r.seconds:.3f}",
-                    hw.get("cpu", ""),
-                    hw.get("cpu_cores", ""),
-                    hw.get("ram_gb", ""),
-                    hw.get("os", ""),
-                    hw.get("python", ""),
-                ])
+                writer.writerow(
+                    [
+                        report.path.name,
+                        report.size_before,
+                        report.tag_before,
+                        r.level,
+                        int(r.image_data),
+                        int(r.zip_fallback),
+                        r.size_after,
+                        r.tag_after,
+                        r.image_after,
+                        saved,
+                        f"{pct:.2f}",
+                        f"{r.seconds:.3f}",
+                        hw.get("cpu", ""),
+                        hw.get("cpu_cores", ""),
+                        hw.get("ram_gb", ""),
+                        hw.get("os", ""),
+                        hw.get("python", ""),
+                    ]
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -478,9 +508,14 @@ def _make_figure(title: str, hw: dict[str, str]) -> matplotlib.figure.Figure:
     )
     fig.suptitle(title, fontsize=14, fontweight="bold", y=0.98)
     fig.text(
-        0.5, 0.955, hw_line,
-        ha="center", va="top", fontsize=8.5,
-        color="#666666", style="italic",
+        0.5,
+        0.955,
+        hw_line,
+        ha="center",
+        va="top",
+        fontsize=8.5,
+        color="#666666",
+        style="italic",
     )
     return fig
 
@@ -492,8 +527,7 @@ def _plot_levels(
 ) -> None:
     """Line plot: size (left axis) and time (right axis) vs deflate level."""
     plain = [
-        r for r in report.results
-        if not r.image_data and not r.zip_fallback and r.ok
+        r for r in report.results if not r.image_data and not r.zip_fallback and r.ok
     ]
     if not plain:
         return
@@ -505,15 +539,27 @@ def _plot_levels(
 
     # --- size line ---
     ax_size.axhline(
-        baseline_mb, color="#AAAAAA", linewidth=1, linestyle="--", label="original",
+        baseline_mb,
+        color="#AAAAAA",
+        linewidth=1,
+        linestyle="--",
+        label="original",
     )
     ax_size.plot(
-        levels, sizes_mb,
-        color=_COLORS["size"], linewidth=2.2, marker="o", markersize=6,
+        levels,
+        sizes_mb,
+        color=_COLORS["size"],
+        linewidth=2.2,
+        marker="o",
+        markersize=6,
         label="compressed size",
     )
     ax_size.fill_between(
-        levels, sizes_mb, baseline_mb, alpha=0.12, color=_COLORS["size"],
+        levels,
+        sizes_mb,
+        baseline_mb,
+        alpha=0.12,
+        color=_COLORS["size"],
     )
 
     ax_size.set_xlabel("Deflate level", fontsize=10)
@@ -529,14 +575,21 @@ def _plot_levels(
             xy=(lvl, sz),
             xytext=(0, 8),
             textcoords="offset points",
-            ha="center", fontsize=7.5, color=_COLORS["size"],
+            ha="center",
+            fontsize=7.5,
+            color=_COLORS["size"],
         )
 
     # --- time line ---
     ax_time.plot(
-        levels, times_s,
-        color=_COLORS["time"], linewidth=2.2, marker="s", markersize=5,
-        linestyle="--", label="time (s)",
+        levels,
+        times_s,
+        color=_COLORS["time"],
+        linewidth=2.2,
+        marker="s",
+        markersize=5,
+        linestyle="--",
+        label="time (s)",
     )
     ax_time.set_ylabel("Planning time (s)", color=_COLORS["time"], fontsize=10)
     ax_time.tick_params(axis="y", labelcolor=_COLORS["time"])
@@ -545,8 +598,11 @@ def _plot_levels(
     lines_a, labels_a = ax_size.get_legend_handles_labels()
     lines_b, labels_b = ax_time.get_legend_handles_labels()
     ax_size.legend(
-        lines_a + lines_b, labels_a + labels_b,
-        loc="upper right", fontsize=8.5, framealpha=0.85,
+        lines_a + lines_b,
+        labels_a + labels_b,
+        loc="upper right",
+        fontsize=8.5,
+        framealpha=0.85,
     )
     ax_size.set_title("Size & time vs deflate level", fontsize=11, pad=8)
 
@@ -562,7 +618,7 @@ def _plot_flags(
         return
 
     variants = [
-        ("base (level 6)",          base,  _COLORS["base"]),
+        ("base (level 6)", base, _COLORS["base"]),
     ]
     for r in report.results:
         if not r.ok or r.level != 6:
@@ -570,27 +626,36 @@ def _plot_flags(
         if r.image_data and r.zip_fallback:
             variants.append(("--image-data + --zip-fallback", r, _COLORS["both"]))
         elif r.image_data:
-            variants.append(("--image-data",    r, _COLORS["image_data"]))
+            variants.append(("--image-data", r, _COLORS["image_data"]))
         elif r.zip_fallback:
-            variants.append(("--zip-fallback",  r, _COLORS["zip_fallback"]))
+            variants.append(("--zip-fallback", r, _COLORS["zip_fallback"]))
 
     if len(variants) <= 1:
         ax.set_visible(False)
         return
 
-    labels   = [v[0] for v in variants]
+    labels = [v[0] for v in variants]
     sizes_mb = [v[1].size_after / MB for v in variants]
-    colors   = [v[2] for v in variants]
+    colors = [v[2] for v in variants]
     baseline_mb = report.size_before / MB
 
     y = range(len(labels))
     bars = ax.barh(
-        y, sizes_mb, color=colors, height=0.5, edgecolor="white", linewidth=0.8,
+        y,
+        sizes_mb,
+        color=colors,
+        height=0.5,
+        edgecolor="white",
+        linewidth=0.8,
     )
 
     # vertical line at original size
     ax.axvline(
-        baseline_mb, color="#AAAAAA", linewidth=1, linestyle="--", label="original",
+        baseline_mb,
+        color="#AAAAAA",
+        linewidth=1,
+        linestyle="--",
+        label="original",
     )
 
     # annotate bars: size + saving %
@@ -600,7 +665,8 @@ def _plot_flags(
             sz + baseline_mb * 0.003,
             bar.get_y() + bar.get_height() / 2,
             f"{sz:.1f} MB  ({pct:+.1f}%)",
-            va="center", fontsize=8.5,
+            va="center",
+            fontsize=8.5,
         )
 
     ax.set_yticks(list(y))
@@ -619,8 +685,7 @@ def plot_report(
     """Render a two-panel PNG for *report* and return its path."""
 
     plain = [
-        r for r in report.results
-        if not r.image_data and not r.zip_fallback and r.ok
+        r for r in report.results if not r.image_data and not r.zip_fallback and r.ok
     ]
     has_flags = any(
         r.ok and r.level == 6 and (r.image_data or r.zip_fallback)
